@@ -1,0 +1,186 @@
+<template>
+  <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg max-w-md w-full p-6">
+      <h2 class="text-xl font-semibold mb-4">Send Template Message</h2>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Template Name *</label>
+          <select v-model="templateName" class="w-full border rounded p-2" required @change="updateParameters">
+            <option value="">Select a template</option>
+            <option value="hello_world">Hello World</option>
+            <option value="order_confirmation">Order Confirmation</option>
+            <option value="delivery_update">Delivery Update</option>
+            <option value="welcome_message">Welcome Message</option>
+            <option value="payment_reminder">Payment Reminder</option>
+            <option value="service_update">Service Update</option>
+            <option value="follow_up">Follow Up</option>
+          </select>
+        </div>
+        
+        <div v-if="templateParameters.length > 0">
+          <h3 class="text-sm font-medium text-gray-700 mb-2">Template Parameters</h3>
+          <div v-for="(param, index) in templateParameters" :key="index" class="mb-2">
+            <label class="block text-xs text-gray-600 mb-1">{{ param.displayName }}</label>
+            <input 
+              v-model="param.value"
+              :placeholder="`Enter ${param.displayName}`"
+              class="w-full border rounded p-2 text-sm"
+              required
+            />
+          </div>
+        </div>
+
+        <div v-else-if="templateName">
+          <p class="text-sm text-gray-600">This template doesn't require parameters.</p>
+        </div>
+        
+        <div class="bg-blue-50 border border-blue-200 rounded p-3">
+          <p class="text-sm text-blue-800">
+            <span class="font-medium">Note:</span> Template messages can be sent to any contact, even if they haven't messaged in the last 24 hours.
+          </p>
+        </div>
+        
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            @click="close" 
+            class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button 
+            @click="send" 
+            :disabled="!templateName || sending"
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {{ sending ? 'Sending...' : 'Send Template' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
+import api from '@/axios'
+
+interface TemplateParameter {
+  name: string;
+  displayName: string;
+  value: string;
+}
+
+const props = defineProps<{
+  show: boolean;
+  conversationId: number;
+  phoneNumber: string;
+  teamId: number;
+}>()
+
+const emit = defineEmits<{
+  close: [];
+  sent: [];
+}>()
+
+const templateName = ref('')
+const templateParameters = ref<TemplateParameter[]>([])
+const sending = ref(false)
+
+// Define template parameters based on template name
+const templateConfigs: Record<string, { name: string; displayName: string }[]> = {
+  hello_world: [],
+  order_confirmation: [
+    { name: 'order_number', displayName: 'Order Number' },
+    { name: 'customer_name', displayName: 'Customer Name' },
+    { name: 'delivery_date', displayName: 'Delivery Date' }
+  ],
+  delivery_update: [
+    { name: 'tracking_number', displayName: 'Tracking Number' },
+    { name: 'estimated_delivery', displayName: 'Estimated Delivery Time' },
+    { name: 'driver_name', displayName: 'Driver Name' }
+  ],
+  welcome_message: [
+    { name: 'company_name', displayName: 'Company Name' },
+    { name: 'contact_person', displayName: 'Contact Person' }
+  ],
+  payment_reminder: [
+    { name: 'invoice_number', displayName: 'Invoice Number' },
+    { name: 'due_date', displayName: 'Due Date' },
+    { name: 'amount', displayName: 'Amount' }
+  ],
+  service_update: [
+    { name: 'service_type', displayName: 'Service Type' },
+    { name: 'update_details', displayName: 'Update Details' },
+    { name: 'next_steps', displayName: 'Next Steps' }
+  ],
+  follow_up: [
+    { name: 'last_contact', displayName: 'Last Contact Date' },
+    { name: 'reason', displayName: 'Follow-up Reason' }
+  ]
+}
+
+const updateParameters = () => {
+  if (templateName.value in templateConfigs) {
+    const config = templateConfigs[templateName.value]
+    templateParameters.value = config.map(param => ({
+      ...param,
+      value: ''
+    }))
+  } else {
+    templateParameters.value = []
+  }
+}
+
+watch(templateName, updateParameters)
+
+const send = async () => {
+  if (!templateName.value || !props.phoneNumber || !props.teamId || !props.conversationId) {
+    alert('Please fill all required fields')
+    return
+  }
+
+  sending.value = true
+  try {
+    const templateParams: Record<string, string> = {}
+    templateParameters.value.forEach(param => {
+      if (param.value.trim()) {
+        templateParams[param.name] = param.value.trim()
+      }
+    })
+
+    // Send via messages endpoint
+    const response = await api.post('/messages', {
+      content: '',
+      messageType: 'Text',
+      isFromDriver: false,
+      conversationId: props.conversationId,
+      teamId: props.teamId,
+      isTemplateMessage: true,
+      templateName: templateName.value,
+      templateParameters: templateParams
+    })
+    
+    emit('sent')
+    close()
+    
+    // Show success message
+    alert('Template message sent successfully!')
+  } catch (error: any) {
+    console.error('Failed to send template:', error)
+    alert(`Failed to send template message: ${error.response?.data?.error || error.message || 'Unknown error'}`)
+  } finally {
+    sending.value = false
+  }
+}
+
+const close = () => {
+  templateName.value = ''
+  templateParameters.value = []
+  emit('close')
+}
+
+defineExpose({
+  close
+})
+</script>

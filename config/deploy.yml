@@ -1,0 +1,37 @@
+service: driverconnect-app
+image: ms3347/driverconnect-app
+
+servers:
+  web:
+    hosts:
+      - 157.180.87.7
+
+env:
+  clear:
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_URLS: "http://+:5001"
+    ConnectionStrings__DefaultConnection: "Data Source=/app/data/DriverConnect.db"
+  secret:
+    - WhatsApp__AccessToken
+    - WhatsApp__PhoneNumberId
+    - WhatsApp__VerifyToken
+
+volumes:
+  - "/var/lib/driverconnect/data:/app/data"
+  - "/var/lib/driverconnect/uploads:/app/uploads"
+
+builder:
+  context: .
+  dockerfile: Dockerfile  # Changed to root Dockerfile
+  arch: arm64 
+
+registry:
+  username: ${DOCKER_USER}
+    password: ${DOCKER_TOKEN}
+
+boot:
+  limit: 30
+  wait: 2
+
+proxy:
+  enabled: false
