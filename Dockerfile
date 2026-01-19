@@ -38,6 +38,9 @@ EXPOSE 5001
 ENV ASPNETCORE_URLS=http://+:5001
 ENV ASPNETCORE_ENVIRONMENT=Production
 
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy backend
 COPY --from=build /app/publish .
 
@@ -47,8 +50,7 @@ COPY --from=frontend /DriverConnectApp.API/wwwroot ./wwwroot
 # Create directories
 RUN mkdir -p /app/data /app/uploads
 
-HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD curl -fs http://localhost:5001/api/health || exit 1
-
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD curl -f http://localhost:5001/api/health || exit 1
 
 ENTRYPOINT ["dotnet", "DriverConnectApp.API.dll"]
