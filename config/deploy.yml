@@ -1,10 +1,12 @@
-service: driverconnect-app
+service: driverconnect-app 
 image: ms3347/driverconnect-app
 
 servers:
   web:
     hosts:
       - 157.180.87.7
+    options:
+      port: 5001 
 
 env:
   clear:
@@ -15,6 +17,7 @@ env:
     - WhatsApp__AccessToken
     - WhatsApp__PhoneNumberId
     - WhatsApp__VerifyToken
+    - KAMAL_REGISTRY_PASSWORD
 
 volumes:
   - "/var/lib/driverconnect/data:/app/data"
@@ -26,12 +29,11 @@ builder:
   arch: arm64 
 
 registry:
-  username: ${DOCKER_USER}
-    password: ${DOCKER_TOKEN}
+  username: ms3347
+  password:
+    - KAMAL_REGISTRY_PASSWORD
 
 boot:
   limit: 30
   wait: 2
 
-proxy:
-  enabled: false
