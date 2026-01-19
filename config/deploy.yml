@@ -11,13 +11,14 @@ servers:
 
       - 157.180.87.7
 
-    container_port: 5001
+    
 
    
 
 proxy:
   hosts:
     - "onestopvan.work.gd"
+  container_port: 5001  
   healthcheck:
     path: /api/health
     interval: 10
