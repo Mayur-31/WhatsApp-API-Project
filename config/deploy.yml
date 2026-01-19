@@ -11,9 +11,7 @@ servers:
 
       - 157.180.87.7
 
-    options:
-      publish:
-        - "5001:5001"
+   
 
 proxy:
   app_port: 5001
