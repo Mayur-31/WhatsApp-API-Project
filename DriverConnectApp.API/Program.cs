@@ -86,7 +86,10 @@ if (app.Environment.IsDevelopment())
 
 // CORS must be before other middleware
 app.UseCors("AllowFrontend");
-app.UseHttpsRedirection();
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
 // Configure static files with proper CORS headers and caching
 var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
