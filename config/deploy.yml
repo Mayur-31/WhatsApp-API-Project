@@ -15,8 +15,8 @@ proxy:
   app_port: 5001
   healthcheck:
     path: /api/health
-    interval: 10s
-    timeout: 5s   
+    interval: 10
+    timeout: 5  
 
 
 env:
