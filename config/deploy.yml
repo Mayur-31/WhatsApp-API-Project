@@ -2,7 +2,6 @@ service: driverconnect-app
 
 image: ms3347/driverconnect-app
 
-app_port: 5001
 
 servers:
 
