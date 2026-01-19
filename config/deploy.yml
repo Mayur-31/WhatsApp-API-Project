@@ -11,7 +11,12 @@ servers:
 
       - 157.180.87.7
 
-   
+proxy:
+  app_port: 5001
+  healthcheck:
+    path: /api/health
+    interval: 10s
+    timeout: 5s   
 
 
 env:
