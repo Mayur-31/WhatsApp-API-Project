@@ -47,4 +47,8 @@ COPY --from=frontend /DriverConnectApp.API/wwwroot ./wwwroot
 # Create directories
 RUN mkdir -p /app/data /app/uploads
 
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+  CMD wget -qO- http://localhost:5001/api/health || exit 1
+
+  
 ENTRYPOINT ["dotnet", "DriverConnectApp.API.dll"]
