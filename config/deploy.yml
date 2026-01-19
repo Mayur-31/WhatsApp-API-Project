@@ -14,7 +14,8 @@ servers:
    
 
 proxy:
-  app_port: 5001
+  hosts:
+    - "onestopvan.work.gd"
   healthcheck:
     path: /api/health
     interval: 10
