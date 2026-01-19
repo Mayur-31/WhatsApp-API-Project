@@ -16,6 +16,7 @@ servers:
    
 
 proxy:
+  ssl: true
   hosts:
     - "onestopvan.work.gd"
   app_port: 5001  
