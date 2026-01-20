@@ -1282,7 +1282,7 @@ namespace DriverConnectApp.API.Services
 
                     driver = new Driver
                     {
-                        Name = $"Driver {normalizedPhone}",
+                        Name = normalizedPhone,
                         PhoneNumber = normalizedPhone,
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true,
