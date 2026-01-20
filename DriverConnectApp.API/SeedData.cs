@@ -182,6 +182,19 @@ namespace DriverConnectApp.API
             var teamBeta = await context.Teams.FirstOrDefaultAsync(t => t.Name == "Team Beta");
             var teamGamma = await context.Teams.FirstOrDefaultAsync(t => t.Name == "Team Gamma");
 
+            // Raymond - Manager/Owner - SuperAdmin with access to ALL teams
+            await EnsureUserExists(
+                userManager,
+                context,
+                "Raymond@ukxd.co.uk",
+                "Raymond123!",
+                "Raymond (Manager)",
+                null, // No specific team - has access to ALL
+                "SuperAdmin",
+                new[] { "SuperAdmin", "Admin", "Manager" },
+                logger
+            );
+
             // SuperAdmin - NO team assignment (can access all)
             await EnsureUserExists(
                 userManager,
@@ -321,7 +334,8 @@ namespace DriverConnectApp.API
                 if (result.Succeeded)
                 {
                     await userManager.AddToRolesAsync(user, roles);
-                    logger.LogInformation("✅ Created user: {Email} with team {TeamId}", email, teamId);
+                    logger.LogInformation("✅ Created user: {Email} with team {TeamId} and roles: {Roles}",
+                        email, teamId, string.Join(", ", roles));
                 }
                 else
                 {

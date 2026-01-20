@@ -46,6 +46,12 @@ env:
 
     - KAMAL_REGISTRY_PASSWORD
 
+    - SMTP_PASSWORD
+
+    - SMTP_USERNAME
+    
+    - SMTP_FROM
+
 
 volumes:
 
