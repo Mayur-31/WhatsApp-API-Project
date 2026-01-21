@@ -31,6 +31,7 @@ builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IMultiTenantWhatsAppService, MultiTenantWhatsAppService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Database Configuration
 builder.Services.AddDbContext<AppDbContext>(options =>

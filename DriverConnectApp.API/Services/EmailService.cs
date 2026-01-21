@@ -1,14 +1,14 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using System.Net;
+﻿using System.Net;
 using System.Net.Mail;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace DriverConnectApp.API.Services
 {
     public interface IEmailService
     {
-        Task SendPasswordResetEmail(string email, string resetLink);
+        Task SendPasswordResetEmailAsync(string toEmail, string resetToken);
+        Task SendEmailAsync(string toEmail, string subject, string body);
     }
 
     public class EmailService : IEmailService
@@ -18,59 +18,88 @@ namespace DriverConnectApp.API.Services
 
         public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _configuration = configuration;
+            _logger = logger;
         }
 
-        public async Task SendPasswordResetEmail(string email, string resetLink)
+        public async Task SendPasswordResetEmailAsync(string toEmail, string resetToken)
+        {
+            var resetLink = $"https://onestopvan.work.gd/reset-password?token={resetToken}&email={Uri.EscapeDataString(toEmail)}";
+
+            var subject = "Password Reset Request - DriverConnect";
+            var body = $@"
+                <html>
+                <body style='font-family: Arial, sans-serif; padding: 20px;'>
+                    <h2>Password Reset Request</h2>
+                    <p>You have requested to reset your password.</p>
+                    <p>Click the link below to reset your password:</p>
+                    <p><a href='{resetLink}' style='background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;'>Reset Password</a></p>
+                    <p>Or copy and paste this link into your browser:</p>
+                    <p>{resetLink}</p>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If you did not request a password reset, please ignore this email.</p>
+                    <br/>
+                    <p>Best regards,<br/>DriverConnect Team</p>
+                </body>
+                </html>
+            ";
+
+            await SendEmailAsync(toEmail, subject, body);
+        }
+
+        public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
             try
             {
-                var smtpSettings = _configuration.GetSection("SmtpSettings");
-                var host = smtpSettings["Host"] ?? "smtp.gmail.com"; // Default to Gmail if not set
-                var port = int.Parse(smtpSettings["Port"] ?? "587");
-                var username = smtpSettings["Username"];
-                var password = smtpSettings["Password"];
-                var from = smtpSettings["From"] ?? "no-reply@driverconnectapp.com";
+                var smtpHost = _configuration["SmtpSettings:Host"];
+                var smtpPort = int.Parse(_configuration["SmtpSettings:Port"] ?? "587");
+                var smtpUsername = _configuration["SmtpSettings:Username"];
+                var smtpPassword = _configuration["SmtpSettings:Password"];
+                var smtpFrom = _configuration["SmtpSettings:From"];
+                var enableSsl = bool.Parse(_configuration["SmtpSettings:EnableSsl"] ?? "true");
 
-                // Log loaded SMTP settings for debugging
-                _logger.LogInformation("SMTP Settings - Host: {Host}, Port: {Port}, Username: {Username}, From: {From}", host, port, username, from);
+                _logger.LogInformation("SMTP Configuration - Host: {Host}, Port: {Port}, From: {From}, EnableSSL: {EnableSsl}",
+                    smtpHost, smtpPort, smtpFrom, enableSsl);
 
-                if (string.IsNullOrEmpty(host) || (host == "smtp.gmail.com" && (string.IsNullOrEmpty(username) || username == "your-email@gmail.com")))
+                if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword))
                 {
-                    _logger.LogInformation("Password Reset Link for {Email}: {ResetLink}", email, resetLink);
-                    Console.WriteLine($"Password Reset Link for {email}: {resetLink}");
-                    return;
+                    _logger.LogError("SMTP settings are not configured properly");
+                    throw new InvalidOperationException("SMTP settings are not configured");
                 }
 
-                using var client = new SmtpClient(host, port)
+                using var client = new SmtpClient(smtpHost, smtpPort)
                 {
-                    Credentials = new NetworkCredential(username, password),
-                    EnableSsl = true
+                    Credentials = new NetworkCredential(smtpUsername, smtpPassword),
+                    EnableSsl = enableSsl,
+                    DeliveryMethod = SmtpDeliveryMethod.Network,
+                    Timeout = 30000 // 30 seconds
                 };
 
                 var mailMessage = new MailMessage
                 {
-                    From = new MailAddress(from),
-                    Subject = "Password Reset - DriverConnect",
-                    Body = $@"
-                        <h3>Password Reset Request</h3>
-                        <p>You requested to reset your password for your DriverConnect account.</p>
-                        <p>Click <a href='{resetLink}'>here</a> to reset your password.</p>
-                        <p>This link allows you to set a new password. It is valid for 24 hours.</p>
-                        <p>If you didn't request this, please ignore this email.</p>
-                        <br><p>Best regards,<br>DriverConnect Team</p>",
+                    From = new MailAddress(smtpFrom ?? smtpUsername!),
+                    Subject = subject,
+                    Body = body,
                     IsBodyHtml = true
                 };
-                mailMessage.To.Add(email);
+
+                mailMessage.To.Add(toEmail);
+
+                _logger.LogInformation("Attempting to send email to {ToEmail} with subject: {Subject}", toEmail, subject);
 
                 await client.SendMailAsync(mailMessage);
-                _logger.LogInformation("Password reset email sent to {Email}", email);
+
+                _logger.LogInformation("✅ Email sent successfully to {ToEmail}", toEmail);
+            }
+            catch (SmtpException smtpEx)
+            {
+                _logger.LogError(smtpEx, "❌ SMTP Error sending email to {ToEmail}: {Message}", toEmail, smtpEx.Message);
+                throw new Exception($"Failed to send email: {smtpEx.Message}", smtpEx);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send password reset email to {Email}. Reset link: {ResetLink}", email, resetLink);
-                Console.WriteLine($"Password Reset Link for {email}: {resetLink} (Failed to send: {ex.Message})");
+                _logger.LogError(ex, "❌ Error sending email to {ToEmail}: {Message}", toEmail, ex.Message);
+                throw;
             }
         }
     }

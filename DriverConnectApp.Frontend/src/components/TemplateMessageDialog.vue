@@ -1,12 +1,12 @@
 <template>
   <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg max-w-md w-full p-6">
-      <h2 class="text-xl font-semibold mb-4">Send Template Message</h2>
+    <div class="bg-white rounded-lg max-w-4xl w-full p-8 max-h-[90vh] overflow-y-auto">
+      <h2 class="text-3xl font-bold mb-6">Send Template Message</h2>
       
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Template Name *</label>
-          <select v-model="templateName" class="w-full border rounded p-2" required @change="updateParameters">
+          <label class="block text-lg font-medium text-gray-700 mb-2">Template Name *</label>
+          <select v-model="templateName" class="w-full border rounded-lg p-3 text-lg" required @change="updateParameters">
             <option value="">Select a template</option>
             <option value="hello_world">Hello World</option>
             <option value="order_confirmation">Order Confirmation</option>
@@ -21,11 +21,11 @@
         <div v-if="templateParameters.length > 0">
           <h3 class="text-sm font-medium text-gray-700 mb-2">Template Parameters</h3>
           <div v-for="(param, index) in templateParameters" :key="index" class="mb-2">
-            <label class="block text-xs text-gray-600 mb-1">{{ param.displayName }}</label>
+            <label class="block text-lg font-medium text-gray-700 mb-2">{{ param.displayName }}</label>
             <input 
               v-model="param.value"
               :placeholder="`Enter ${param.displayName}`"
-              class="w-full border rounded p-2 text-sm"
+              class="w-full border rounded-lg p-3 text-lg"
               required
             />
           </div>
@@ -44,14 +44,14 @@
         <div class="flex justify-end space-x-3 mt-6">
           <button 
             @click="close" 
-            class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+            class="px-6 py-3 text-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button 
             @click="send" 
             :disabled="!templateName || sending"
-            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+            class="px-6 py-3 text-lg font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md"
           >
             {{ sending ? 'Sending...' : 'Send Template' }}
           </button>
