@@ -5,11 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DriverConnectApp.API.Services
 {
-    public interface IEmailService
-    {
-        Task SendPasswordResetEmailAsync(string toEmail, string resetToken);
-        Task SendEmailAsync(string toEmail, string subject, string body);
-    }
+   
 
     public class EmailService : IEmailService
     {
