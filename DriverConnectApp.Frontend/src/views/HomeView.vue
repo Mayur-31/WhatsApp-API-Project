@@ -100,35 +100,37 @@
         </p>
       </div>
       
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="flex flex-col lg:flex-row gap-6">
         <!-- Conversations List -->
-        <div class="lg:col-span-1 bg-white rounded-lg shadow-lg overflow-hidden">
+        <div class="lg:w-1/4 bg-white rounded-lg shadow-lg overflow-hidden">
           <div class="bg-green-100 px-4 py-3 border-b">
-            <div class="flex justify-between items-center mb-2">
-              <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
-              <!-- Search Box - NEW -->
-              <div class="relative mb-4">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="Search contacts or numbers..."
-                  class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-              </div>
-              <div class="flex space-x-2">
-                <button 
-                  @click="toggleUnansweredFilter" 
-                  :class="['text-xs px-2 py-1 rounded', showUnansweredOnly ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700']"
-                >
+            
+            <!-- Search Box at TOP (like WhatsApp) -->
+            <div class="relative mb-3">
+              <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search conversations..."
+                class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                @input="handleSearch"
+              />
+              <button 
+                v-if="searchQuery" 
+                @click="clearSearch" 
+                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+              <div class="flex flex-wrap gap-2 mb-2">
+                <button @click="toggleUnansweredFilter" 
+                  :class="['text-xs px-2 py-1 rounded', showUnansweredOnly ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700']">
                   {{ showUnansweredOnly ? `Unanswered (${unansweredCount})` : 'All' }}
                 </button>
-                <button 
-                  @click="toggleGroupsFilter" 
-                  :class="['text-xs px-2 py-1 rounded flex items-center space-x-1', showGroupsOnly ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700']"
-                >
+                <button @click="toggleGroupsFilter" 
+                  :class="['text-xs px-2 py-1 rounded flex items-center space-x-1', showGroupsOnly ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700']">
                   <span>👥</span>
                   <span>{{ showGroupsOnly ? 'Groups Only' : 'All Types' }}</span>
                 </button>
@@ -204,7 +206,7 @@
         </div>
 
         <!-- Chat Area -->
-        <div class="lg:col-span-2 bg-white rounded-lg shadow-lg overflow-hidden">
+        <div class="lg:w-3/4 bg-white rounded-lg shadow-lg overflow-hidden">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -2127,35 +2129,51 @@ const sendMessage = async () => {
 };
 
 
-let pollingInterval: number | null = null;
+let pollingInterval: NodeJS.Timeout | null = null;
+let lastMessageCheck = Date.now();
 
-// Start polling for updates
-function startPolling() {
+const startSmartPolling = () => {
   if (pollingInterval) {
     clearInterval(pollingInterval);
   }
-
-  pollingInterval = window.setInterval(async () => {
-    // Silently refresh conversations
+  
+  pollingInterval = setInterval(async () => {
+    // Only poll if user is active
+    if (document.hidden) return;
+    
     try {
-      await loadConversations();
-      
-      // Refresh current conversation messages
+      // Check for new messages in current conversation
       if (selectedConversation.value?.Id) {
-        const response = await api.get(`/conversations/${selectedConversation.value.Id}`);
-        const newMessages = response.data.Messages || [];
+        const lastMessageId = messages.value.length > 0 
+          ? messages.value[messages.value.length - 1].Id 
+          : 0;
         
-        // Only update if there are new messages
-        if (newMessages.length > messages.value.length) {
-          messages.value = newMessages;
+        const response = await api.get(
+          `/conversations/${selectedConversation.value.Id}/messages/new?sinceId=${lastMessageId}`
+        );
+        
+        if (response.data && response.data.length > 0) {
+          messages.value.push(...response.data);
           await scrollToBottom();
+          
+          // Show desktop notification if enabled
+          if (response.data.some((msg: MessageDto) => msg.IsFromDriver)) {
+            showDesktopNotification(`New message from ${selectedConversation.value.DriverName}`);
+          }
         }
+      }
+      
+      // Check for new conversations less frequently (every 2 minutes)
+      if (Date.now() - lastMessageCheck > 120000) {
+        await loadConversations();
+        lastMessageCheck = Date.now();
       }
     } catch (error) {
       console.error('Polling error:', error);
     }
-  }, 5000); // Poll every 5 seconds
-}
+  }, 30000); // 30 seconds, not 5
+};
+
 
 // Stop polling
 function stopPolling() {
@@ -2164,6 +2182,72 @@ function stopPolling() {
     pollingInterval = null;
   }
 }
+
+const showDesktopNotification = (message: string) => {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('DriverConnect', {
+      body: message,
+      icon: '/favicon.ico'
+    });
+  } else if ('Notification' in window && Notification.permission !== 'denied') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        new Notification('DriverConnect', {
+          body: message,
+          icon: '/favicon.ico'
+        });
+      }
+    });
+  }
+};
+
+const getAbsoluteMediaUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return `${window.location.origin}${url}`;
+  return `${window.location.origin}/uploads/${url}`;
+};
+
+const downloadMedia = async (message: MessageDto) => {
+  try {
+    const mediaUrl = getAbsoluteMediaUrl(message.MediaUrl || '');
+    const fileName = message.FileName || 
+                    `download_${message.Id}.${getFileExtension(message.MessageType)}`;
+    
+    const response = await fetch(mediaUrl);
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('Failed to download media:', error);
+    alert('Failed to download file. Please try again.');
+  }
+};
+
+const getFileExtension = (messageType: string): string => {
+  switch (messageType) {
+    case 'Image': return 'jpg';
+    case 'Video': return 'mp4';
+    case 'Audio': return 'mp3';
+    case 'Document': return 'pdf';
+    default: return 'txt';
+  }
+};
+
+const formatMessageLinks = (text: string): string => {
+  if (!text) return text;
+  
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.replace(urlRegex, (url) => {
+    return `<a href="${url}" target="_blank" class="text-blue-500 underline hover:text-blue-600">${url}</a>`;
+  });
+};
 
 // UPDATED: selectConversation to include window status check
 const selectConversation = async (conversation: ConversationDto) => {
@@ -2241,7 +2325,10 @@ onMounted(async () => {
   
   // Then load conversations with team context
   await loadConversations();
-  startPolling();
+  startSmartPolling();
+  if ('Notification' in window) {
+    Notification.requestPermission();
+  }
   await loadUnansweredCount();
   
   if (isAdminOrManager.value) {

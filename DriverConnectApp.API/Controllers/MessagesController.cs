@@ -1380,6 +1380,19 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+        [HttpGet("download-media")]
+        public async Task<IActionResult> DownloadMedia([FromQuery] string url)
+        {
+            // Simple 10-line method
+            var fileName = Path.GetFileName(url);
+            var filePath = Path.Combine(_environment.WebRootPath, "uploads", fileName);
+
+            if (!System.IO.File.Exists(filePath))
+                return NotFound();
+
+            return PhysicalFile(filePath, "application/octet-stream", fileName);
+        }
+
         // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
         [HttpPost("send-template")]
         public async Task<IActionResult> SendTemplateMessage([FromBody] SendTemplateByDriverIdRequest request)

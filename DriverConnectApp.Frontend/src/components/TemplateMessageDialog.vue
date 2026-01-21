@@ -135,6 +135,8 @@ const updateParameters = () => {
 watch(templateName, updateParameters)
 
 const send = async () => {
+
+  if (sending.value) return;
   if (!templateName.value || !props.phoneNumber || !props.teamId || !props.conversationId) {
     alert('Please fill all required fields')
     return
