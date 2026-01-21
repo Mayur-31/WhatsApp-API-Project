@@ -52,7 +52,7 @@ namespace DriverConnectApp.API.Controllers
             _whatsAppService = whatsAppService;
         }
 
-        
+
 
         [HttpPost]
         [RequestSizeLimit(524288000)]
@@ -1378,19 +1378,6 @@ namespace DriverConnectApp.API.Controllers
                 _logger.LogError(ex, "Error checking 24-hour window for conversation {ConversationId}", conversationId);
                 return StatusCode(500, new { message = "Failed to check message sending capability", error = ex.Message });
             }
-        }
-
-        [HttpGet("download-media")]
-        public async Task<IActionResult> DownloadMedia([FromQuery] string url)
-        {
-            // Simple 10-line method
-            var fileName = Path.GetFileName(url);
-            var filePath = Path.Combine(_environment.WebRootPath, "uploads", fileName);
-
-            if (!System.IO.File.Exists(filePath))
-                return NotFound();
-
-            return PhysicalFile(filePath, "application/octet-stream", fileName);
         }
 
         // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
