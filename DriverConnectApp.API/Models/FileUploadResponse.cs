@@ -8,7 +8,7 @@
         public string MimeType { get; set; } = string.Empty;
         public string MediaUrl { get; set; } = string.Empty;
         public string MessageType { get; set; } = string.Empty;
-        public string? WhatsAppMediaId { get; set; }
+
         // Compression information
         public bool WasCompressed { get; set; }
         public string? CompressionInfo { get; set; }
