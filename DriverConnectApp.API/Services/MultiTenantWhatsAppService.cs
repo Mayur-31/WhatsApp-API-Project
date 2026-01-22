@@ -55,8 +55,8 @@ namespace DriverConnectApp.API.Services
             }
 
             _logger.LogInformation(
-                "📨 Processing message for team {TeamId}: IsTemplate={IsTemplate}, TemplateName={TemplateName}, Content={Content}",
-                teamId, request.IsTemplateMessage, request.TemplateName, request.Content);
+                "📨 Processing message for team {TeamId}: IsTemplate={IsTemplate}, Content={Content}",
+                teamId, request.IsTemplateMessage, request.Content);
 
             var team = await GetTeamById(teamId);
             if (team == null || !team.IsActive)
@@ -64,7 +64,7 @@ namespace DriverConnectApp.API.Services
                 throw new InvalidOperationException($"Team {teamId} not found or inactive");
             }
 
-            // ✅ CRITICAL FIX: Check 24-hour window for non-template messages (STRICT - NO GRACE PERIOD)
+            // ✅ 24-hour window check for NON-template messages
             if (!request.IsTemplateMessage && !request.IsGroupMessage && request.ConversationId.HasValue)
             {
                 bool canSendFreeText = await CanSendNonTemplateMessage(request.ConversationId.Value);
@@ -72,124 +72,68 @@ namespace DriverConnectApp.API.Services
                 if (!canSendFreeText)
                 {
                     _logger.LogWarning(
-                        "🚫 BLOCKED: Cannot send non-template message to conversation {ConversationId} - outside 24-hour window",
+                        "🚫 Cannot send non-template to conversation {ConversationId} - outside 24h window",
                         request.ConversationId);
 
                     throw new InvalidOperationException(
                         "TEMPLATE_REQUIRED|Cannot send regular messages outside 24-hour window. " +
-                        "Please use a template message instead. The 24-hour window only opens when a customer messages you.");
+                        "Use a template message instead.");
                 }
-
-                _logger.LogInformation(
-                    "✅ ALLOWED: Can send free text to conversation {ConversationId} - within 24-hour window",
-                    request.ConversationId);
             }
 
-            // Handle group messages first
+            // Handle group messages
             if (request.IsGroupMessage && !string.IsNullOrEmpty(request.GroupId))
             {
                 return await HandleGroupMessage(request, team);
             }
 
-            // ✅ IMPORTANT: For individual messages, we don't create messages here anymore
-            // The message is already created by MessagesController
-
-            // Handle template messages for individuals
-            if (request.IsTemplateMessage && !string.IsNullOrEmpty(request.TemplateName))
+            // ✅ TEMPLATE MESSAGES: Already handled in MessagesController
+            if (request.IsTemplateMessage)
             {
-                _logger.LogInformation("🎯 Sending template message: {TemplateName} for team {TeamId}",
-                    request.TemplateName, teamId);
-
-                string? phoneNumber = GetPhoneNumberFromRequest(request, teamId);
-
-                if (string.IsNullOrEmpty(phoneNumber))
+                _logger.LogInformation("✅ Template message already saved by MessagesController");
+                return new
                 {
-                    throw new InvalidOperationException("Phone number is required for template messages. Could not find phone number from request, driver, or conversation.");
-                }
-
-                var success = await SendTemplateMessageAsync(
-                    phoneNumber,
-                    request.TemplateName,
-                    request.TemplateParameters ?? new Dictionary<string, string>(),
-                    teamId,
-                    request.LanguageCode ?? "en_US"
-                );
-
-                if (success)
-                {
-                    // ✅ FIXED: Don't create message here - already created by MessagesController
-                    _logger.LogInformation("✅ Template message sent via WhatsApp API for phone: {PhoneNumber}", phoneNumber);
-
-                    return new
-                    {
-                        Status = "Sent",
-                        IsTemplate = true,
-                        WhatsAppMessageId = request.WhatsAppMessageId,
-                        PhoneNumber = phoneNumber,
-                        Success = true
-                    };
-                }
-                else
-                {
-                    throw new InvalidOperationException("Failed to send template message via WhatsApp API");
-                }
+                    Status = "TemplateProcessing",
+                    IsTemplate = true,
+                    WhatsAppMessageId = request.WhatsAppMessageId,
+                    Note = "Template will be sent via background task"
+                };
             }
 
-            // Handle regular messages for individuals
-            if (request.DriverId == null && string.IsNullOrEmpty(request.PhoneNumber))
-            {
-                throw new InvalidOperationException("DriverId or PhoneNumber is required for regular messages");
-            }
-
+            // Handle regular (non-template) messages
             Driver? driver = null;
+            string? phoneNumber = null;
+
             if (request.DriverId.HasValue)
             {
                 driver = await _context.Drivers.FindAsync(request.DriverId.Value);
+                phoneNumber = driver?.PhoneNumber;
             }
             else if (!string.IsNullOrEmpty(request.PhoneNumber))
             {
-                var normalizedPhone = PhoneNumberUtil.NormalizePhoneNumber(request.PhoneNumber, team.CountryCode ?? "91");
+                phoneNumber = request.PhoneNumber;
                 driver = await _context.Drivers
-                    .FirstOrDefaultAsync(d => d.PhoneNumber == normalizedPhone && d.TeamId == teamId);
-
-                if (driver == null)
-                {
-                    driver = new Driver
-                    {
-                        Name = $"Driver {request.PhoneNumber}",
-                        PhoneNumber = normalizedPhone,
-                        CreatedAt = DateTime.UtcNow,
-                        IsActive = true,
-                        TeamId = teamId
-                    };
-                    _context.Drivers.Add(driver);
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("📝 Auto-created driver with ID: {DriverId} for phone {PhoneNumber}",
-                        driver.Id, normalizedPhone);
-                }
+                    .FirstOrDefaultAsync(d => d.PhoneNumber == phoneNumber && d.TeamId == teamId);
             }
 
-            if (driver == null)
+            if (string.IsNullOrEmpty(phoneNumber))
             {
-                throw new InvalidOperationException("Could not find or create driver for message");
+                throw new InvalidOperationException("Could not determine phone number for message");
             }
 
-            var messageType = Enum.TryParse<MessageType>(request.MessageType, out var type)
-                ? type : MessageType.Text;
-
-            // ✅ FIXED: Just send to WhatsApp API, don't create message
+            // ✅ ONLY send via WhatsApp API - NO database operations
             var testMode = _configuration.GetValue<bool>("WhatsApp:TestMode", false);
             if (!testMode)
             {
-                await SendRegularMessageToWhatsAppApi(request, driver.PhoneNumber, team);
+                await SendRegularMessageToWhatsAppApi(request, phoneNumber, team);
             }
 
             return new
             {
-                Status = "Sent",
+                Status = "SentToWhatsApp",
                 IsTemplate = false,
                 WhatsAppMessageId = request.WhatsAppMessageId,
-                PhoneNumber = driver.PhoneNumber,
+                PhoneNumber = phoneNumber,
                 Success = true
             };
         }
@@ -1173,49 +1117,25 @@ namespace DriverConnectApp.API.Services
         {
             try
             {
-                _logger.LogInformation("📥 Processing INDIVIDUAL message from {From}, Type: {Type}",
-                    incomingMessage.From, incomingMessage.Type);
-
-                // Extract phone number from WhatsApp format (e.g., "919763083597@c.us" -> "919763083597")
+                // Extract phone number
                 var phoneNumber = PhoneNumberUtil.ExtractPhoneFromWhatsAppId(incomingMessage.From);
-
                 if (string.IsNullOrEmpty(phoneNumber))
                 {
                     _logger.LogWarning("⚠️ Could not extract phone number from: {From}", incomingMessage.From);
                     return;
                 }
 
-                _logger.LogInformation("📱 Phone number extracted from WhatsApp: {Phone}", phoneNumber);
-
-                // ✅ FIX: First try to detect country code from the number itself
+                // Normalize phone number
                 var detectedCountryCode = PhoneNumberUtil.DetectCountryCode(phoneNumber);
-
-                // Use detected country code, or fall back to team's country code
                 var countryCodeToUse = detectedCountryCode ?? team.CountryCode ?? "91";
-
-                _logger.LogInformation(
-                    "🌍 Country Code Selection: Detected={Detected}, Team={Team}, Using={Using}",
-                    detectedCountryCode ?? "none",
-                    team.CountryCode ?? "none",
-                    countryCodeToUse);
-
-                // Normalize phone number with the appropriate country code
                 var normalizedPhone = PhoneNumberUtil.NormalizePhoneNumber(phoneNumber, countryCodeToUse);
 
-                _logger.LogInformation(
-                    "📱 Phone normalization: Original={Original}, Detected Code={Code}, Normalized={Normalized}",
-                    phoneNumber, countryCodeToUse, normalizedPhone);
-
-                // Find driver by normalized phone number
+                // Find or create driver
                 var driver = await _context.Drivers
                     .FirstOrDefaultAsync(d => d.PhoneNumber == normalizedPhone && d.TeamId == team.Id);
 
                 if (driver == null)
                 {
-                    _logger.LogInformation(
-                        "👤 Auto-creating driver for phone: {Phone} in team {TeamId} with country code {Code}",
-                        normalizedPhone, team.Id, countryCodeToUse);
-
                     driver = new Driver
                     {
                         Name = normalizedPhone,
@@ -1226,9 +1146,6 @@ namespace DriverConnectApp.API.Services
                     };
                     _context.Drivers.Add(driver);
                     await _context.SaveChangesAsync();
-
-                    _logger.LogInformation("✅ Created driver {DriverId} for phone {Phone}",
-                        driver.Id, normalizedPhone);
                 }
 
                 // Find or create conversation
@@ -1249,18 +1166,21 @@ namespace DriverConnectApp.API.Services
                     };
                     _context.Conversations.Add(conversation);
                     await _context.SaveChangesAsync();
-
-                    _logger.LogInformation("✅ Created conversation {ConversationId} for driver {DriverId}",
-                        conversation.Id, driver.Id);
                 }
 
-                // ✅ CRITICAL: UPDATE TIMESTAMP - This opens the 24-hour window
+                // ✅ CRITICAL: Check if message already exists (deduplication)
+                var existingMessage = await _context.Messages
+                    .FirstOrDefaultAsync(m => m.WhatsAppMessageId == incomingMessage.Id);
+
+                if (existingMessage != null)
+                {
+                    _logger.LogInformation("⚠️ Message already exists: {MessageId}", incomingMessage.Id);
+                    return; // Skip duplicate
+                }
+
+                // Update conversation timestamps
                 conversation.LastInboundMessageAt = DateTime.UtcNow;
                 conversation.LastMessageAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation("🕐 Updated LastInboundMessageAt for conversation {ConversationId}: {Timestamp}",
-                    conversation.Id, conversation.LastInboundMessageAt);
 
                 // Extract message data
                 var messageData = ExtractMessageData(incomingMessage);
@@ -1283,19 +1203,19 @@ namespace DriverConnectApp.API.Services
                     SenderPhoneNumber = normalizedPhone,
                     SenderName = driver.Name,
                     SentAt = DateTime.UtcNow,
-                    WhatsAppMessageId = incomingMessage.Id,
-                    Context = incomingMessage.Context?.Id
+                    WhatsAppMessageId = incomingMessage.Id, // ✅ Use WhatsApp's ID
+                    Context = incomingMessage.Context?.Id,
+                    Status = MessageStatus.Delivered // Inbound messages are automatically delivered
                 };
 
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("✅ Processed inbound message {MessageId}. Window now OPEN for 24 hours",
-                    incomingMessage.Id);
+                _logger.LogInformation("✅ Inbound message saved: {MessageId}", incomingMessage.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error processing individual message from {From}", incomingMessage.From);
+                _logger.LogError(ex, "❌ Error processing inbound message");
                 throw;
             }
         }

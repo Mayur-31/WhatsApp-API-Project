@@ -61,13 +61,13 @@ namespace DriverConnectApp.API.Controllers
             try
             {
                 _logger.LogInformation(
-                    "📤 Received message request: Type={MessageType}, IsTemplate={IsTemplate}, Conversation={ConversationId}, IsFromDriver={IsFromDriver}",
-                    request?.MessageType, request?.IsTemplateMessage, request?.ConversationId, request?.IsFromDriver);
+                    "📤 Received message request: Type={MessageType}, IsTemplate={IsTemplate}, Conversation={ConversationId}",
+                    request?.MessageType, request?.IsTemplateMessage, request?.ConversationId);
 
                 if (request == null)
                     return BadRequest(new { message = "Invalid request body" });
 
-                // ✅ ADDED: Check if message already exists to prevent duplicates
+                // ✅ FIX: Better deduplication check
                 if (!string.IsNullOrEmpty(request.WhatsAppMessageId))
                 {
                     var existingMessage = await _context.Messages
@@ -75,29 +75,28 @@ namespace DriverConnectApp.API.Controllers
 
                     if (existingMessage != null)
                     {
-                        _logger.LogWarning("⚠️ Message already sent with WhatsAppMessageId: {WhatsAppMessageId}", request.WhatsAppMessageId);
-                        return Ok(new MessageDto
-                        {
-                            Id = existingMessage.Id,
-                            Content = existingMessage.Content,
-                            MessageType = existingMessage.MessageType.ToString(),
-                            IsFromDriver = existingMessage.IsFromDriver,
-                            SentAt = existingMessage.SentAt,
-                            ConversationId = existingMessage.ConversationId,
-                            WhatsAppMessageId = existingMessage.WhatsAppMessageId,
-                            Status = existingMessage.Status.ToString(),
-                            IsTemplateMessage = existingMessage.IsTemplateMessage,
-                            TemplateName = existingMessage.TemplateName,
-                            SenderName = existingMessage.SenderName,
-                            SenderPhoneNumber = existingMessage.SenderPhoneNumber
-                        });
+                        _logger.LogWarning("⚠️ Message already exists: {WhatsAppMessageId}", request.WhatsAppMessageId);
+                        return Ok(await MapMessageToDto(existingMessage));
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(request.Content) && request.MessageType == "Text" && !request.IsTemplateMessage)
-                    return BadRequest(new { message = "Message content is required for non-template text messages" });
+                // ✅ FIX: Validate template messages
+                if (request.IsTemplateMessage)
+                {
+                    if (string.IsNullOrEmpty(request.TemplateName))
+                    {
+                        return BadRequest(new { message = "TemplateName is required for template messages" });
+                    }
 
-                // Get current staff user info
+                    // Validate 24-hour window is NOT required for templates
+                    _logger.LogInformation("✅ Template message - bypassing 24-hour window check");
+                }
+                else if (string.IsNullOrWhiteSpace(request.Content) && request.MessageType == "Text")
+                {
+                    return BadRequest(new { message = "Message content is required for non-template text messages" });
+                }
+
+                // Get current user info
                 ApplicationUser? currentUser = null;
                 string currentUserName = "Staff";
                 string? currentUserId = null;
@@ -107,10 +106,9 @@ namespace DriverConnectApp.API.Controllers
                     currentUser = await _userManager.GetUserAsync(User);
                     if (currentUser != null)
                     {
-                        currentUserName = currentUser?.FullName ?? currentUser?.UserName ?? "Staff";
-                        currentUserId = currentUser?.Id;
+                        currentUserName = currentUser.FullName ?? currentUser.UserName ?? "Staff";
+                        currentUserId = currentUser.Id;
                     }
-                    _logger.LogInformation("👤 Message sent by: {UserName} ({UserId})", currentUserName, currentUserId);
                 }
 
                 if (request.IsGroupMessage && !string.IsNullOrEmpty(request.GroupId))
@@ -132,11 +130,62 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+
+        private async Task<MessageDto> MapMessageToDto(Message message)
+        {
+            var dto = new MessageDto
+            {
+                Id = message.Id,
+                ConversationId = message.ConversationId,
+                Content = message.Content,
+                MessageType = message.MessageType.ToString(),
+                MediaUrl = message.MediaUrl,
+                FileName = message.FileName,
+                FileSize = message.FileSize,
+                MimeType = message.MimeType,
+                Location = message.Location,
+                ContactName = message.ContactName,
+                ContactPhone = message.ContactPhone,
+                IsFromDriver = message.IsFromDriver,
+                SentAt = message.SentAt,
+                WhatsAppMessageId = message.WhatsAppMessageId,
+                SentByUserId = message.SentByUserId,
+                SentByUserName = message.SentByUserName,
+                IsTemplateMessage = message.IsTemplateMessage,
+                TemplateName = message.TemplateName,
+                Status = message.Status.ToString(),
+                SenderName = message.SenderName,
+                SenderPhoneNumber = message.SenderPhoneNumber
+            };
+
+            // Load reply message if exists
+            if (message.ReplyToMessageId.HasValue)
+            {
+                var replyMessage = await _context.Messages
+                    .FirstOrDefaultAsync(m => m.Id == message.ReplyToMessageId.Value);
+
+                if (replyMessage != null)
+                {
+                    dto.ReplyToMessage = new MessageDto
+                    {
+                        Id = replyMessage.Id,
+                        Content = replyMessage.Content,
+                        MessageType = replyMessage.MessageType.ToString(),
+                        IsFromDriver = replyMessage.IsFromDriver,
+                        SentAt = replyMessage.SentAt,
+                        SenderName = replyMessage.SenderName
+                    };
+                }
+            }
+
+            return dto;
+        }
+
         private async Task<IActionResult> HandleIndividualMessage(
-            MessageRequest request,
-            ApplicationUser? currentUser,
-            string currentUserName,
-            string? currentUserId)
+    MessageRequest request,
+    ApplicationUser? currentUser,
+    string currentUserName,
+    string? currentUserId)
         {
             // Validate required fields for individual messages
             if (!request.DriverId.HasValue && !request.ConversationId.HasValue && string.IsNullOrEmpty(request.PhoneNumber))
@@ -219,19 +268,12 @@ namespace DriverConnectApp.API.Controllers
             if (conversation == null)
                 return BadRequest(new { message = "Could not find or create conversation" });
 
-            // Convert message type - ✅ FIXED: Template messages should have Template type
-            if (!Enum.TryParse<MessageType>(request.MessageType, out var messageType))
-            {
-                messageType = request.IsTemplateMessage ? MessageType.Template : MessageType.Text;
-            }
-
-            // ✅ ADDED: Generate WhatsApp Message ID if not provided
+            // ✅ FIXED: Generate WhatsApp Message ID if not provided
             var whatsAppMessageId = request.WhatsAppMessageId;
             if (string.IsNullOrEmpty(whatsAppMessageId))
             {
-                whatsAppMessageId = request.IsTemplateMessage
-                    ? $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}"
-                    : $"web_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
+                var prefix = request.IsTemplateMessage ? "template" : "web";
+                whatsAppMessageId = $"{prefix}_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
             }
 
             // Handle reply functionality
@@ -259,40 +301,44 @@ namespace DriverConnectApp.API.Controllers
 
             // ✅ FIXED: Create proper message content for template messages
             string messageContent;
+            MessageType messageTypeEnum; // ✅ Changed variable name to avoid conflict
+
             if (request.IsTemplateMessage)
             {
-                if (!string.IsNullOrEmpty(request.Content))
-                {
-                    messageContent = request.Content;
-                }
-                else if (!string.IsNullOrEmpty(request.TemplateName))
-                {
-                    messageContent = $"Template: {request.TemplateName}";
+                // For templates, the content should be the actual template message
+                messageContent = !string.IsNullOrEmpty(request.Content)
+                    ? request.Content
+                    : $"Template: {request.TemplateName}";
 
-                    // Add parameters if available
-                    if (request.TemplateParameters != null && request.TemplateParameters.Any())
+                // Add parameters if available
+                if (request.TemplateParameters != null && request.TemplateParameters.Any())
+                {
+                    var paramsText = string.Join(", ", request.TemplateParameters.Select(kv => $"{kv.Key}: {kv.Value}"));
+                    if (!messageContent.Contains(paramsText))
                     {
-                        var paramsText = string.Join(", ", request.TemplateParameters.Select(kv => $"{kv.Key}: {kv.Value}"));
                         messageContent += $" ({paramsText})";
                     }
                 }
-                else
-                {
-                    messageContent = "Template message";
-                }
+
+                // Template messages should have Template type
+                messageTypeEnum = MessageType.Template;
             }
             else
             {
                 messageContent = request.Content ?? string.Empty;
+                if (!Enum.TryParse<MessageType>(request.MessageType, out messageTypeEnum))
+                {
+                    messageTypeEnum = MessageType.Text;
+                }
             }
 
-            // Create message
+            // Create message with all details
             var message = new Message
             {
                 ConversationId = conversation.Id,
                 Content = messageContent,
-                MessageType = messageType,
-                MediaUrl = mediaUrl,
+                MessageType = messageTypeEnum, // ✅ Use the correct variable
+                MediaUrl = request.MediaUrl,
                 FileName = request.FileName,
                 FileSize = request.FileSize,
                 MimeType = request.MimeType,
@@ -304,42 +350,33 @@ namespace DriverConnectApp.API.Controllers
                 SenderPhoneNumber = request.SenderPhoneNumber ?? (request.IsFromDriver ? conversation.Driver?.PhoneNumber : "System"),
                 SenderName = request.SenderName ?? (request.IsFromDriver ? conversation.Driver?.Name : currentUserName),
                 SentAt = DateTime.UtcNow,
-                WhatsAppMessageId = whatsAppMessageId, // ✅ Use the generated ID
+                WhatsAppMessageId = whatsAppMessageId,
                 SentByUserId = request.IsFromDriver ? null : currentUserId,
                 SentByUserName = request.IsFromDriver ? null : currentUserName,
-                ReplyToMessageId = request.ReplyToMessageId,
-                ReplyToMessageContent = request.ReplyToMessageContent ?? (replyToMessage?.Content != null ?
-                    (replyToMessage.Content.Length > 100 ?
-                     replyToMessage.Content.Substring(0, 100) + "..." :
-                     replyToMessage.Content) : null),
-                ReplyToSenderName = request.ReplyToSenderName ?? (replyToMessage != null ?
-                    (replyToMessage.IsGroupMessage ?
-                     (replyToMessage.SentByUserName ?? replyToMessage.SenderName ?? "Unknown") :
-                     (replyToMessage.IsFromDriver ? "Driver" : (replyToMessage.SentByUserName ?? "Staff"))) : null),
                 IsTemplateMessage = request.IsTemplateMessage,
                 TemplateName = request.TemplateName,
                 TemplateParametersJson = request.TemplateParameters != null
                     ? JsonSerializer.Serialize(request.TemplateParameters)
                     : null,
-                Status = MessageStatus.Sent // ✅ Set initial status
+                Status = MessageStatus.Sent
             };
 
             _context.Messages.Add(message);
             conversation.LastMessageAt = message.SentAt;
 
-            // ✅ IMPORTANT: Save immediately so frontend can get the message ID
+            // ✅ CRITICAL: Save IMMEDIATELY so frontend gets the message
             await _context.SaveChangesAsync();
 
             // Send to WhatsApp service if not from driver
-            if (!request.IsFromDriver)
+            if (!request.IsFromDriver && !request.IsTemplateMessage) // ✅ FIX: Don't send templates here
             {
                 var teamId = conversation.TeamId ?? request.TeamId ?? 1;
 
                 var sendRequest = new SendMessageRequest
                 {
                     Content = messageContent,
-                    MessageType = request.IsTemplateMessage ? "Template" : request.MessageType,
-                    MediaUrl = mediaUrl,
+                    MessageType = messageTypeEnum.ToString(),
+                    MediaUrl = request.MediaUrl,
                     FileName = request.FileName,
                     FileSize = request.FileSize,
                     MimeType = request.MimeType,
@@ -354,83 +391,64 @@ namespace DriverConnectApp.API.Controllers
                     Topic = request.Topic,
                     PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber,
                     LanguageCode = request.LanguageCode ?? "en_US",
-                    WhatsAppMessageId = whatsAppMessageId // ✅ Pass the same ID to WhatsApp service
+                    WhatsAppMessageId = whatsAppMessageId
                 };
 
-                // ✅ Run in background to not block the response
+                // ✅ Run in background for regular messages ONLY
                 _ = Task.Run(async () =>
                 {
                     try
                     {
                         await _whatsAppService.SendMessageAsync(sendRequest, teamId);
-                        _logger.LogInformation("✅ WhatsApp message sent successfully for message ID: {MessageId}", message.Id);
+                        _logger.LogInformation("✅ WhatsApp message sent: {MessageId}", message.Id);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "❌ Failed to send message via WhatsApp for message ID: {MessageId}", message.Id);
+                        _logger.LogError(ex, "❌ Failed to send via WhatsApp: {MessageId}", message.Id);
                     }
                 });
             }
-
-            // Create DTO for response
-            var messageDto = new MessageDto
+            else if (!request.IsFromDriver && request.IsTemplateMessage)
             {
-                Id = message.Id,
-                ConversationId = message.ConversationId,
-                Content = message.Content,
-                MessageType = message.MessageType.ToString(),
-                MediaUrl = message.MediaUrl,
-                FileName = message.FileName,
-                FileSize = message.FileSize,
-                MimeType = message.MimeType,
-                Location = message.Location,
-                ContactName = message.ContactName,
-                ContactPhone = message.ContactPhone,
-                IsFromDriver = message.IsFromDriver,
-                SentAt = message.SentAt,
-                WhatsAppMessageId = message.WhatsAppMessageId,
-                JobId = message.JobId,
-                Context = message.Context,
-                Priority = message.Priority,
-                ThreadId = message.ThreadId,
-                ReplyToMessageId = message.ReplyToMessageId,
-                ReplyToMessageContent = message.ReplyToMessageContent,
-                ReplyToSenderName = message.ReplyToSenderName,
-                SentByUserId = message.SentByUserId,
-                SentByUserName = message.SentByUserName,
-                IsGroupMessage = message.IsGroupMessage,
-                SenderPhoneNumber = message.SenderPhoneNumber,
-                SenderName = message.SenderName,
-                IsTemplateMessage = message.IsTemplateMessage,
-                TemplateName = message.TemplateName,
-                Status = message.Status.ToString(), // ✅ Include status
-                PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber
-            };
+                // ✅ Handle template messages SEPARATELY
+                var teamId = conversation.TeamId ?? request.TeamId ?? 1;
+                var targetPhone = conversation.Driver?.PhoneNumber ?? request.PhoneNumber;
 
-            if (replyToMessage != null)
-            {
-                messageDto.ReplyToMessage = new MessageDto
+                if (!string.IsNullOrEmpty(targetPhone))
                 {
-                    Id = replyToMessage.Id,
-                    Content = replyToMessage.Content,
-                    MessageType = replyToMessage.MessageType.ToString(),
-                    MediaUrl = replyToMessage.MediaUrl,
-                    FileName = replyToMessage.FileName,
-                    IsFromDriver = replyToMessage.IsFromDriver,
-                    SentAt = replyToMessage.SentAt,
-                    SenderName = replyToMessage.SenderName,
-                    SenderPhoneNumber = replyToMessage.SenderPhoneNumber,
-                    SentByUserId = replyToMessage.SentByUserId,
-                    SentByUserName = replyToMessage.SentByUserName
-                };
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var success = await _whatsAppService.SendTemplateMessageAsync(
+                                targetPhone,
+                                request.TemplateName!,
+                                request.TemplateParameters ?? new Dictionary<string, string>(),
+                                teamId,
+                                request.LanguageCode ?? "en_US"
+                            );
+
+                            if (success)
+                            {
+                                _logger.LogInformation("✅ Template sent via WhatsApp: {TemplateName}", request.TemplateName);
+                            }
+                            else
+                            {
+                                _logger.LogError("❌ Failed to send template: {TemplateName}", request.TemplateName);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "❌ Error sending template: {TemplateName}", request.TemplateName);
+                        }
+                    });
+                }
             }
 
-            _logger.LogInformation("✅ Message created successfully: ID={MessageId}, WhatsAppID={WhatsAppMessageId}, Template={IsTemplate}",
-                message.Id, message.WhatsAppMessageId, message.IsTemplateMessage);
-
+            // Return DTO
+            var messageDto = await MapMessageToDto(message);
             return Ok(messageDto);
         }
-
 
         private async Task<IActionResult> HandleGroupMessage(
             MessageRequest request,
