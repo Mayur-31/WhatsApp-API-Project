@@ -55,7 +55,7 @@ namespace DriverConnectApp.Domain.Entities
         public string? SenderPhoneNumber { get; set; }
         public string? SenderName { get; set; }
         public bool IsGroupMessage { get; set; } = false;
-
+        public string? WhatsAppMediaId { get; set; }
         // Reply functionality
         public int? ReplyToMessageId { get; set; }
 
@@ -105,8 +105,11 @@ namespace DriverConnectApp.Domain.Entities
 
     public enum MessageStatus
     {
+        Pending = 0,
         Sent = 1,
         Delivered = 2,
-        Read = 3
+        Read = 3,
+
+        Failed = 4
     }
 }

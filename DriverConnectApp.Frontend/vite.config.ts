@@ -25,10 +25,18 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist',
+    // Setting this here allows you to just run 'vite build' without extra flags
+    outDir: 'dist', 
     emptyOutDir: true,
     assetsDir: 'assets',
     rollupOptions: {
+      // ✅ ADD THIS SECTION TO HIDE THE SIGNALR WARNINGS
+      onwarn(warning, warn) {
+        if (warning.code === 'INVALID_ANNOTATION' && warning.message.includes('/*#__PURE__*/')) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',

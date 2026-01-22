@@ -14,6 +14,8 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using DriverConnectApp.API.Services;
+using Microsoft.AspNetCore.SignalR;
+using DriverConnectApp.API.Hubs;
 
 namespace DriverConnectApp.API.Services
 {
@@ -26,6 +28,8 @@ namespace DriverConnectApp.API.Services
         private readonly IMessageService _messageService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IHubContext<MessageHub> _hubContext;
+        private readonly IWebHostEnvironment _environment;
 
         public MultiTenantWhatsAppService(
             AppDbContext context,
@@ -34,7 +38,9 @@ namespace DriverConnectApp.API.Services
             IConfiguration configuration,
             IMessageService messageService,
             UserManager<ApplicationUser> userManager,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IHubContext<MessageHub> hubContext,
+            IWebHostEnvironment environment)
         {
             _context = context;
             _logger = logger;
@@ -44,6 +50,8 @@ namespace DriverConnectApp.API.Services
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _hubContext = hubContext;
+            _environment = environment;
         }
 
         public async Task<object> SendMessageAsync(SendMessageRequest request, int teamId)
@@ -766,6 +774,94 @@ namespace DriverConnectApp.API.Services
             }
         }
 
+        private string GetFileExtensionFromMimeType(string mimeType)
+        {
+            return mimeType switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/png" => ".png",
+                "image/gif" => ".gif",
+                "image/webp" => ".webp",
+                "video/mp4" => ".mp4",
+                "video/3gpp" => ".3gp",
+                "audio/ogg" => ".ogg",
+                "audio/mpeg" => ".mp3",
+                "application/pdf" => ".pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+                _ => ".bin"
+            };
+        }
+
+        public async Task<string?> DownloadAndStoreWhatsAppMediaAsync(string mediaId, int teamId)
+        {
+            try
+            {
+                var team = await GetTeamById(teamId);
+                if (team == null)
+                {
+                    _logger.LogError("Team {TeamId} not found for media download", teamId);
+                    return null;
+                }
+
+                // Step 1: Get media URL from WhatsApp
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+
+                var url = $"https://graph.facebook.com/v{team.ApiVersion}/{mediaId}";
+                var response = await client.GetAsync(url);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to get media URL: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+
+                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+                var mediaUrl = result.GetProperty("url").GetString();
+
+                if (string.IsNullOrEmpty(mediaUrl))
+                {
+                    _logger.LogError("No URL in media response");
+                    return null;
+                }
+
+                // Step 2: Download media content
+                var mediaResponse = await client.GetAsync(mediaUrl);
+                if (!mediaResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to download media: {StatusCode}", mediaResponse.StatusCode);
+                    return null;
+                }
+
+                // Step 3: Determine file type and extension
+                var mimeType = mediaResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+                var extension = GetFileExtensionFromMimeType(mimeType);
+
+                // Step 4: Save to local storage
+                var uploadsDir = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
+                if (!Directory.Exists(uploadsDir))
+                    Directory.CreateDirectory(uploadsDir);
+
+                var fileName = $"{Guid.NewGuid()}{extension}";
+                var filePath = Path.Combine(uploadsDir, fileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await mediaResponse.Content.CopyToAsync(fileStream);
+                }
+
+                // Step 5: Return accessible URL
+                var baseUrl = $"{_httpContextAccessor.HttpContext?.Request.Scheme}://{_httpContextAccessor.HttpContext?.Request.Host}";
+                return $"{baseUrl}/uploads/{fileName}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading WhatsApp media {MediaId}", mediaId);
+                return null;
+            }
+        }
+
         public async Task<bool> SendWhatsAppTextMessageAsync(string to, string text, int teamId, bool isTemplate = false)
         {
             try
@@ -1329,13 +1425,37 @@ namespace DriverConnectApp.API.Services
                 // Extract message data
                 var messageData = ExtractMessageData(incomingMessage);
 
+                string? mediaUrl = null;
+                string? whatsAppMediaId = null;
+
+                if (!string.IsNullOrEmpty(incomingMessage.Image?.Id))
+                {
+                    whatsAppMediaId = incomingMessage.Image.Id;
+                    mediaUrl = await DownloadAndStoreWhatsAppMediaAsync(incomingMessage.Image.Id, team.Id);
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Video?.Id))
+                {
+                    whatsAppMediaId = incomingMessage.Video.Id;
+                    mediaUrl = await DownloadAndStoreWhatsAppMediaAsync(incomingMessage.Video.Id, team.Id);
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Document?.Id))
+                {
+                    whatsAppMediaId = incomingMessage.Document.Id;
+                    mediaUrl = await DownloadAndStoreWhatsAppMediaAsync(incomingMessage.Document.Id, team.Id);
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Audio?.Id))
+                {
+                    whatsAppMediaId = incomingMessage.Audio.Id;
+                    mediaUrl = await DownloadAndStoreWhatsAppMediaAsync(incomingMessage.Audio.Id, team.Id);
+                }
+
                 // Create message record
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
                     Content = messageData.Content,
                     MessageType = messageData.Type,
-                    MediaUrl = messageData.MediaUrl,
+                    MediaUrl = mediaUrl,
                     FileName = messageData.FileName,
                     FileSize = messageData.FileSize,
                     MimeType = messageData.MimeType,
@@ -1348,11 +1468,31 @@ namespace DriverConnectApp.API.Services
                     SenderName = driver.Name,
                     SentAt = DateTime.UtcNow,
                     WhatsAppMessageId = incomingMessage.Id,
-                    Context = incomingMessage.Context?.Id
+                    Context = incomingMessage.Context?.Id,
+                    WhatsAppMediaId = whatsAppMediaId
                 };
 
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
+
+                // ✅ BROADCAST VIA SIGNALR (AFTER message is created)
+                if (_hubContext != null)
+                {
+                    await _hubContext.Clients
+                        .Group($"conversation-{conversation.Id}")
+                        .SendAsync("ReceiveMessage", new
+                        {
+                            Id = message.Id,
+                            Content = message.Content,
+                            MessageType = message.MessageType.ToString(),
+                            MediaUrl = message.MediaUrl,
+                            IsFromDriver = message.IsFromDriver,
+                            SentAt = message.SentAt,
+                            SenderName = message.SenderName
+                        });
+
+                    _logger.LogInformation("✅ Message broadcast via SignalR");
+                }
 
                 _logger.LogInformation("✅ Processed inbound message {MessageId}. Window now OPEN for 24 hours",
                     incomingMessage.Id);
@@ -1744,8 +1884,8 @@ namespace DriverConnectApp.API.Services
         }
 
         private (string Content, MessageType Type, string? MediaUrl, string? FileName,
-                 long? FileSize, string? MimeType, string? Location, string? ContactName,
-                 string? ContactPhone) ExtractMessageData(IncomingMessage incomingMessage)
+         long? FileSize, string? MimeType, string? Location, string? ContactName,
+         string? ContactPhone) ExtractMessageData(IncomingMessage incomingMessage)
         {
             string content = string.Empty;
             MessageType type = MessageType.Text;
@@ -1768,6 +1908,20 @@ namespace DriverConnectApp.API.Services
                 type = MessageType.Image;
                 mediaUrl = incomingMessage.Image.Link;
                 mimeType = incomingMessage.Image.MimeType;
+            }
+            else if (incomingMessage.Video != null)
+            {
+                content = incomingMessage.Video.Caption ?? "Video";
+                type = MessageType.Video;
+                mediaUrl = incomingMessage.Video.Link;
+                mimeType = incomingMessage.Video.MimeType;
+            }
+            else if (incomingMessage.Audio != null)
+            {
+                content = "Audio";
+                type = MessageType.Audio;
+                mediaUrl = incomingMessage.Audio.Link;
+                mimeType = incomingMessage.Audio.MimeType;
             }
             else if (incomingMessage.Document != null)
             {

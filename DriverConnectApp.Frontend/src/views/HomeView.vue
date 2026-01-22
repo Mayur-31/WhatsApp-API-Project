@@ -1569,6 +1569,7 @@ import { useAuthStore } from '@/stores/auth';
 import api from '@/axios';
 import MediaGalleryView from '@/components/MediaGalleryView.vue';
 import TemplateMessageDialog from '@/components/TemplateMessageDialog.vue';
+import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr'
 
 import type { 
   ConversationDto, 
@@ -1588,6 +1589,7 @@ import type {
   StarMessageRequest
 } from '@/types/conversations';
 
+const connection = ref<HubConnection | null>(null)
 const router = useRouter();
 const authStore = useAuthStore();
 
@@ -2009,7 +2011,9 @@ const sendMessage = async () => {
   if ((! newMessage.value. trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
     return;
   }
-
+  if (connection.value) {
+    await connection.value.invoke('SendMessage', sentMessage)
+  }
   // ✅ CRITICAL FIX: Check 24-hour window BEFORE sending non-template messages
   if (! selectedConversation.value. IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
     // ✅ Block the message and show error
@@ -2129,39 +2133,46 @@ const sendMessage = async () => {
 
 let pollingInterval: number | null = null;
 
-// Start polling for updates
-function startPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-  }
+// Initialize SignalR connection
+const initSignalR = async () => {
+  try {
+    const conn = new HubConnectionBuilder()
+      .withUrl('/hubs/message')  // Adjust URL based on your backend
+      .withAutomaticReconnect()
+      .build()
 
-  pollingInterval = window.setInterval(async () => {
-    // Silently refresh conversations
-    try {
-      await loadConversations();
-      
-      // Refresh current conversation messages
-      if (selectedConversation.value?.Id) {
-        const response = await api.get(`/conversations/${selectedConversation.value.Id}`);
-        const newMessages = response.data.Messages || [];
-        
-        // Only update if there are new messages
-        if (newMessages.length > messages.value.length) {
-          messages.value = newMessages;
-          await scrollToBottom();
-        }
+    conn.on('ReceiveMessage', (message) => {
+      if (selectedConversation.value?.Id === message.ConversationId) {
+        messages.value.push(message)
+        scrollToBottom()
       }
-    } catch (error) {
-      console.error('Polling error:', error);
-    }
-  }, 5000); // Poll every 5 seconds
+      // Also update the conversation in the list
+      updateConversationInList(message)
+    })
+
+    conn.on('NewConversation', (conversation) => {
+      conversations.value.unshift(conversation)
+    })
+
+    await conn.start()
+    connection.value = conn
+    console.log('SignalR connected')
+  } catch (err) {
+    console.error('SignalR failed:', err)
+  }
 }
 
-// Stop polling
-function stopPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
+const updateConversationInList = (message: any) => {
+  const index = conversations.value.findIndex(c => c.Id === message.ConversationId)
+  if (index !== -1) {
+    const conversation = conversations.value[index]
+    conversation.LastMessagePreview = message.Content
+    conversation.LastMessageAt = message.SentAt
+    conversation.UnreadCount = (conversation.UnreadCount || 0) + 1
+    
+    // Move to top
+    conversations.value.splice(index, 1)
+    conversations.value.unshift(conversation)
   }
 }
 
@@ -2232,21 +2243,21 @@ const openTemplateDialog = () => {
 
 // Lifecycle - UPDATED: Load teams on mount
 onMounted(async () => {
-  console.log('HomeView mounted - initializing teams and conversations');
-  console.log('User roles:', authStore.user?.roles);
-  console.log('User team ID:', authStore.user?.teamId);
+  console.log('HomeView mounted - initializing teams and conversations')
+  console.log('User roles:', authStore.user?.roles)
+  console.log('User team ID:', authStore.user?.teamId)
   
   // Load teams first
-  await loadTeams();
+  await loadTeams()
   
   // Then load conversations with team context
-  await loadConversations();
-  startPolling();
-  await loadUnansweredCount();
+  await loadConversations()
+  await initSignalR()  // <-- ADD THIS LINE
+  await loadUnansweredCount()
   
   if (isAdminOrManager.value) {
-    await loadDepartments();
-    await loadUsers();
+    await loadDepartments()
+    await loadUsers()
   }
 
   // Close context menu when clicking outside
@@ -2260,11 +2271,14 @@ watch(selectedTeamId, async (newTeamId) => {
 });
 
 onUnmounted(() => {
-  stopPolling();
-  if (windowStatusPollInterval.value) {
-    clearInterval(windowStatusPollInterval.value);
-    windowStatusPollInterval.value = null;
+  if (connection.value) {
+    connection.value.stop()
   }
+  if (windowStatusPollInterval.value) {
+    clearInterval(windowStatusPollInterval.value)
+    windowStatusPollInterval.value = null
+  }
+  document.removeEventListener('click', closeMessageMenu)
 });
 
 // Watch for messages changes to preload media
