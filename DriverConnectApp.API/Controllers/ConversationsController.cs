@@ -57,8 +57,11 @@ namespace DriverConnectApp.API.Controllers
                 _logger.LogInformation("👤 User {UserId} - Admin: {IsAdmin}, UserTeamId: {UserTeamId}",
                     currentUserId, isAdmin, userTeamId);
 
-                // Start with base query
+                // ✅ FIX 1: Use Include to properly load navigation properties
                 var query = _context.Conversations
+                    .Include(c => c.Driver)
+                    .Include(c => c.Department)
+                    .Include(c => c.Group)
                     .Where(c => c.IsActive)
                     .AsQueryable();
 
@@ -69,14 +72,6 @@ namespace DriverConnectApp.API.Controllers
                     {
                         query = query.Where(c => c.TeamId == teamId.Value);
                         _logger.LogInformation("🔧 Admin filtering by team: {TeamId}", teamId);
-                    }
-                    else if (teamId.HasValue && teamId == 0)
-                    {
-                        _logger.LogInformation("🔧 Admin selected 'All Teams' - no team filter applied");
-                    }
-                    else
-                    {
-                        _logger.LogInformation("🔧 Admin default - showing all teams");
                     }
                 }
                 else
@@ -109,48 +104,73 @@ namespace DriverConnectApp.API.Controllers
                     query = query.Where(c => !c.IsGroupConversation);
                 }
 
-                // Get conversations with proper null handling - FIXED: Use direct counts instead of navigation properties
-                var conversations = await query
+                // ✅ FIX 2: Execute query first, then transform to DTO in memory
+                var conversationsList = await query
                     .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
                     .ThenByDescending(c => c.Id)
-                    .Select(c => new ConversationDto
+                    .ToListAsync();
+
+                // ✅ FIX 3: Transform to DTOs in memory with proper null handling
+                var conversationDtos = new List<ConversationDto>();
+
+                foreach (var c in conversationsList)
+                {
+                    // Get message count
+                    var messageCount = await _context.Messages
+                        .Where(m => m.ConversationId == c.Id)
+                        .CountAsync();
+
+                    // Get last message preview
+                    var lastMessagePreview = await _context.Messages
+                        .Where(m => m.ConversationId == c.Id)
+                        .OrderByDescending(m => m.SentAt)
+                        .Select(m => m.Content)
+                        .FirstOrDefaultAsync();
+
+                    // Get group member count if applicable
+                    var groupMemberCount = 0;
+                    if (c.GroupId.HasValue)
+                    {
+                        groupMemberCount = await _context.GroupParticipants
+                            .Where(gp => gp.GroupId == c.GroupId.Value && gp.IsActive)
+                            .CountAsync();
+                    }
+
+                    var dto = new ConversationDto
                     {
                         Id = c.Id,
-                        DriverId = c.DriverId ?? 0, // FIXED: Handle NULL for group conversations
+                        DriverId = c.DriverId ?? 0,
                         DriverName = c.IsGroupConversation
                             ? (c.GroupName ?? "Unknown Group")
-                            : (c.Driver != null ? c.Driver.Name : "Unknown Driver"),
+                            : (c.Driver?.Name ?? "Unknown Driver"),
                         DriverPhone = c.IsGroupConversation
                             ? (c.WhatsAppGroupId ?? "No ID")
-                            : (c.Driver != null ? c.Driver.PhoneNumber : "No phone"),
+                            : (c.Driver?.PhoneNumber ?? "No phone"),
                         Topic = c.Topic ?? (c.IsGroupConversation ? "Group Conversation" : "General Conversation"),
                         LastMessageAt = c.LastMessageAt,
                         CreatedAt = c.CreatedAt,
-                        MessageCount = _context.Messages.Count(m => m.ConversationId == c.Id), // FIXED: Use direct count
+                        MessageCount = messageCount,
                         IsAnswered = c.IsAnswered,
                         DepartmentId = c.DepartmentId,
-                        DepartmentName = c.Department != null ? c.Department.Name : null,
+                        DepartmentName = c.Department?.Name,
                         AssignedToUserId = c.AssignedToUserId,
                         UnreadCount = 0,
-                        LastMessagePreview = _context.Messages
-                            .Where(m => m.ConversationId == c.Id)
-                            .OrderByDescending(m => m.SentAt)
-                            .Select(m => m.Content ?? "Loading...")
-                            .FirstOrDefault() ?? "No messages", // FIXED: Handle null properly
+                        LastMessagePreview = lastMessagePreview ?? "No messages",
                         IsGroupConversation = c.IsGroupConversation,
                         GroupName = c.GroupName,
                         WhatsAppGroupId = c.WhatsAppGroupId,
                         GroupId = c.GroupId,
-                        GroupMemberCount = c.Group != null ?
-                            _context.GroupParticipants.Count(gp => gp.GroupId == c.GroupId && gp.IsActive) : 0, // FIXED: Use direct count
+                        GroupMemberCount = groupMemberCount,
                         TeamId = c.TeamId ?? 0
-                    })
-                    .ToListAsync();
+                    };
+
+                    conversationDtos.Add(dto);
+                }
 
                 _logger.LogInformation("✅ Successfully loaded {Count} conversations for user {UserId}",
-                    conversations.Count, currentUserId);
+                    conversationDtos.Count, currentUserId);
 
-                return Ok(conversations);
+                return Ok(conversationDtos);
             }
             catch (Exception ex)
             {
@@ -165,6 +185,8 @@ namespace DriverConnectApp.API.Controllers
                 });
             }
         }
+
+
 
         [HttpGet("groups/{groupId}")]
         public async Task<ActionResult<GroupDto>> GetGroup(int groupId)
@@ -596,7 +618,7 @@ namespace DriverConnectApp.API.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<ConversationDetailDto>> GetConversation(int id)
         {
-            _logger.LogInformation("GetConversation called for ID: {Id}", id);
+            _logger.LogInformation("🔍 GetConversation called for ID: {Id}", id);
 
             try
             {
@@ -604,47 +626,17 @@ namespace DriverConnectApp.API.Controllers
                 var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
                 var userTeamId = await GetCurrentUserTeamId();
 
-                // First, get the conversation without the problematic column
+                // ✅ FIX: Load conversation with all required includes
                 var conversation = await _context.Conversations
                     .Include(c => c.Driver)
                     .Include(c => c.Department)
                     .Include(c => c.Group)
-                        .ThenInclude(g => g!.Participants)
-                            .ThenInclude(p => p.Driver)
                     .FirstOrDefaultAsync(c => c.Id == id);
 
                 if (conversation == null)
                 {
-                    _logger.LogWarning("Conversation {Id} not found", id);
+                    _logger.LogWarning("❌ Conversation {Id} not found", id);
                     return NotFound(new { message = "Conversation not found" });
-                }
-
-                // Then get messages separately to avoid complex query issues
-                var messages = await _context.Messages
-                    .Include(m => m.ReplyToMessage)
-                    .Where(m => m.ConversationId == id && !m.IsDeleted)
-                    .OrderBy(m => m.SentAt)
-                    .ToListAsync();
-
-                // Calculate window status - handle null safely
-                bool canSendNonTemplate = false;
-                TimeSpan? remainingTime = null;
-                double? hoursRemaining = null;
-                double? minutesRemaining = null;
-                DateTime? windowExpiresAt = null;
-
-                if (conversation.LastInboundMessageAt.HasValue)
-                {
-                    var timeSinceLastMessage = DateTime.UtcNow - conversation.LastInboundMessageAt.Value;
-                    canSendNonTemplate = timeSinceLastMessage.TotalHours <= 24;
-
-                    if (canSendNonTemplate)
-                    {
-                        remainingTime = TimeSpan.FromHours(24) - timeSinceLastMessage;
-                        hoursRemaining = remainingTime?.TotalHours;
-                        minutesRemaining = remainingTime?.TotalMinutes % 60;
-                        windowExpiresAt = conversation.LastInboundMessageAt.Value.AddHours(24);
-                    }
                 }
 
                 // Check team access
@@ -652,24 +644,21 @@ namespace DriverConnectApp.API.Controllers
                 {
                     if (conversation.TeamId != userTeamId)
                     {
-                        _logger.LogWarning("User {UserId} attempted to access conversation {ConversationId} from team {ConversationTeamId} but belongs to team {UserTeamId}",
+                        _logger.LogWarning("🚫 User {UserId} attempted to access conversation {ConversationId} from team {ConversationTeamId} but belongs to team {UserTeamId}",
                             currentUserId, id, conversation.TeamId, userTeamId);
                         return Forbid("You do not have access to this conversation.");
                     }
                 }
 
-                // Validate conversation data
-                if (conversation.IsGroupConversation && string.IsNullOrEmpty(conversation.WhatsAppGroupId))
-                {
-                    _logger.LogWarning("Group conversation {Id} has no WhatsAppGroupId", id);
-                    return BadRequest(new { message = "Conversation has invalid group data" });
-                }
+                // Get messages separately
+                var messages = await _context.Messages
+                    .Include(m => m.ReplyToMessage)
+                    .Where(m => m.ConversationId == id && !m.IsDeleted)
+                    .OrderBy(m => m.SentAt)
+                    .ToListAsync();
 
-                if (!conversation.IsGroupConversation && conversation.Driver == null)
-                {
-                    _logger.LogWarning("Conversation {Id} has no driver data", id);
-                    return BadRequest(new { message = "Conversation has invalid driver data" });
-                }
+                // Calculate window status
+                var windowStatus = conversation.GetWindowStatus();
 
                 // Build DTO
                 var dto = new ConversationDetailDto
@@ -695,17 +684,13 @@ namespace DriverConnectApp.API.Controllers
                     WhatsAppGroupId = conversation.WhatsAppGroupId,
                     GroupId = conversation.GroupId,
 
-                    // 24-hour rule status
+                    // 24-hour window status
                     LastInboundMessageAt = conversation.LastInboundMessageAt,
-                    CanSendNonTemplateMessages = canSendNonTemplate,
-                    HoursRemaining = hoursRemaining,
-                    MinutesRemaining = minutesRemaining,
-                    WindowExpiresAt = windowExpiresAt,
-                    NonTemplateMessageStatus = canSendNonTemplate
-                        ? $"Free messaging available ({Math.Floor(hoursRemaining ?? 0)}h {Math.Floor(minutesRemaining ?? 0)}m remaining)"
-                        : conversation.LastInboundMessageAt.HasValue
-                            ? "Template messages only (no inbound message in last 24 hours)"
-                            : "No inbound messages yet",
+                    CanSendNonTemplateMessages = windowStatus.CanSendNonTemplateMessages,
+                    HoursRemaining = windowStatus.HoursRemaining,
+                    MinutesRemaining = windowStatus.MinutesRemaining,
+                    WindowExpiresAt = windowStatus.WindowExpiresAt,
+                    NonTemplateMessageStatus = windowStatus.Message,
 
                     Messages = messages.Select(m => new MessageDto
                     {
@@ -752,7 +737,7 @@ namespace DriverConnectApp.API.Controllers
                     Participants = new List<GroupParticipantDto>()
                 };
 
-                // Load group participants
+                // Load group participants if needed
                 if (conversation.IsGroupConversation && conversation.GroupId.HasValue)
                 {
                     var participants = await _context.GroupParticipants
@@ -774,22 +759,23 @@ namespace DriverConnectApp.API.Controllers
                         Role = p.Role ?? "member"
                     }).ToList();
 
-                    _logger.LogInformation("Loaded {Count} active participants for group {GroupId}",
+                    _logger.LogInformation("✅ Loaded {Count} active participants for group {GroupId}",
                         dto.Participants.Count, conversation.GroupId);
                 }
 
-                _logger.LogInformation("Returning conversation {Id} with {MessageCount} messages and {ParticipantCount} participants",
+                _logger.LogInformation("✅ Returning conversation {Id} with {MessageCount} messages and {ParticipantCount} participants",
                     id, dto.Messages.Count, dto.Participants.Count);
 
                 return Ok(dto);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching conversation {Id}", id);
+                _logger.LogError(ex, "❌ Error fetching conversation {Id}: {Message}", id, ex.Message);
                 return StatusCode(500, new
                 {
                     message = "An error occurred while fetching the conversation",
                     details = ex.Message,
+                    innerException = ex.InnerException?.Message,
                     stackTrace = ex.StackTrace
                 });
             }
