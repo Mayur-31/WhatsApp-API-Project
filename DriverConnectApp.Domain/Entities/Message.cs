@@ -71,7 +71,6 @@ namespace DriverConnectApp.Domain.Entities
 
         // WhatsApp Message Status & Interaction Features
         public MessageStatus Status { get; set; } = MessageStatus.Sent;
-        public string? ErrorMessage { get; set; }
         public bool IsStarred { get; set; } = false;
         public bool IsPinned { get; set; } = false;
         public DateTime? PinnedAt { get; set; }
@@ -108,7 +107,6 @@ namespace DriverConnectApp.Domain.Entities
     {
         Sent = 1,
         Delivered = 2,
-        Read = 3,
-        Failed = 4
+        Read = 3
     }
 }
