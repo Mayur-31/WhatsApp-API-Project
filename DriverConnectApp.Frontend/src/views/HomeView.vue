@@ -106,18 +106,6 @@
           <div class="bg-green-100 px-4 py-3 border-b">
             <div class="flex justify-between items-center mb-2">
               <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
-              <!-- Search Box - NEW -->
-              <div class="relative mb-4">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="Search contacts or numbers..."
-                  class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-              </div>
               <div class="flex space-x-2">
                 <button 
                   @click="toggleUnansweredFilter" 
@@ -219,7 +207,6 @@
             <!-- Chat Header -->
             <div class="bg-green-100 px-6 py-4 border-b">
               <div class="flex items-center justify-between">
-                <!-- LEFT SIDE: Contact Info -->
                 <div class="flex items-center space-x-3">
                   <div :class="['w-3 h-3 rounded-full', selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']"></div>
                   <div>
@@ -286,26 +273,32 @@
                       </div>
                     </div>
                   </div>
-                  <!-- RIGHT SIDE: Action Buttons - MOVED HERE -->
                   <div class="flex space-x-2">
-                    <button @click="openMediaGallery" class="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded flex items-center space-x-1">
+                    <button 
+                      @click="openMediaGallery"
+                      class="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded flex items-center space-x-1"
+                      :disabled="!selectedConversation"
+                      :title="!selectedConversation ? 'Select a conversation first' : 'View shared media, documents and links'"
+                    >
                       <span>🖼️</span>
                       <span>Media</span>
                     </button>
 
-                    <button @click="deleteCurrentContact" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded flex items-center space-x-1">
+                    <button 
+                      v-if="isAdminOrManager && !selectedConversation.IsGroupConversation && selectedConversation.DriverId"
+                      @click="deleteCurrentContact"
+                      class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded flex items-center space-x-1"
+                    >
                       <span>🗑️</span>
                       <span>Delete Contact</span>
                     </button>
-
-                    <button @click="openAssignModal" class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded flex items-center space-x-1">
+                    <button v-if="isAdminOrManager" @click="openAssignModal" class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded flex items-center space-x-1">
                       <span>👤</span>
                       <span>Assign</span>
                     </button>
-
-                    <button @click="toggleAnsweredStatus" class="text-xs px-3 py-2 rounded flex items-center space-x-1 bg-red-500 hover:bg-red-600 text-white">
-                      <span>❌</span>
-                      <span>Mark Unanswered</span>
+                    <button @click="toggleAnsweredStatus" :class="['text-xs px-3 py-2 rounded flex items-center space-x-1', selectedConversation.IsAnswered ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white']">
+                      <span>{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
+                      <span>{{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}</span>
                     </button>
                   </div>
                 </div>
@@ -705,7 +698,20 @@
               </div>
             </div>
             
-            
+            <!-- Quick Replies -->
+            <div class="bg-gray-100 px-6 py-3 border-t">
+              <div class="flex flex-wrap gap-2">
+                <button 
+                  v-for="quickReply in quickReplies" 
+                  :key="quickReply" 
+                  @click="sendQuickReply(quickReply)" 
+                  class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors hover:border-green-300 hover:text-green-700"
+                  :disabled="sending"
+                >
+                  {{ quickReply }}
+                </button>
+              </div>
+            </div>
             
             <!-- Message Input -->
             <div class="bg-white px-6 py-4 border-t">
@@ -1603,7 +1609,6 @@ const templatePhoneNumber = ref('');
 const windowStatusPollInterval = ref<number | null>(null);
 // ✅ NEW: Window status polling interval
 
-const searchQuery = ref('');
 
 
 // Computed properties
@@ -1742,32 +1747,6 @@ const isValidGroup = computed(() => {
 const isValidContact = computed(() => {
   return newContact.value.Name.trim() !== '' && 
          newContact.value.PhoneNumber.trim() !== '';
-});
-
-// Update filteredConversations computed property
-const filteredConversations = computed(() => {
-  let filtered = conversations.value;
-
-  // Apply search filter
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase();
-    filtered = filtered.filter(conv => 
-      conv.DriverName?.toLowerCase().includes(query) ||
-      conv.DriverPhone?.includes(query) ||
-      conv.PhoneNumber?.includes(query)
-    );
-  }
-
-  // Apply other filters
-  if (showUnansweredOnly.value) {
-    filtered = filtered.filter(c => !c.IsAnswered);
-  }
-
-  if (showGroupsOnly.value) {
-    filtered = filtered.filter(c => c.IsGroupConversation);
-  }
-
-  return filtered;
 });
 
 // NEW: 24-hour window methods
@@ -2126,45 +2105,6 @@ const sendMessage = async () => {
   }
 };
 
-
-let pollingInterval: number | null = null;
-
-// Start polling for updates
-function startPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-  }
-
-  pollingInterval = window.setInterval(async () => {
-    // Silently refresh conversations
-    try {
-      await loadConversations();
-      
-      // Refresh current conversation messages
-      if (selectedConversation.value?.Id) {
-        const response = await api.get(`/conversations/${selectedConversation.value.Id}`);
-        const newMessages = response.data.Messages || [];
-        
-        // Only update if there are new messages
-        if (newMessages.length > messages.value.length) {
-          messages.value = newMessages;
-          await scrollToBottom();
-        }
-      }
-    } catch (error) {
-      console.error('Polling error:', error);
-    }
-  }, 5000); // Poll every 5 seconds
-}
-
-// Stop polling
-function stopPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
-  }
-}
-
 // UPDATED: selectConversation to include window status check
 const selectConversation = async (conversation: ConversationDto) => {
   if (!conversation. Id) {
@@ -2241,7 +2181,6 @@ onMounted(async () => {
   
   // Then load conversations with team context
   await loadConversations();
-  startPolling();
   await loadUnansweredCount();
   
   if (isAdminOrManager.value) {
@@ -2260,7 +2199,6 @@ watch(selectedTeamId, async (newTeamId) => {
 });
 
 onUnmounted(() => {
-  stopPolling();
   if (windowStatusPollInterval.value) {
     clearInterval(windowStatusPollInterval.value);
     windowStatusPollInterval.value = null;
