@@ -62,7 +62,9 @@ namespace DriverConnectApp.API.Controllers
                     .Include(c => c.Driver)
                     .Include(c => c.Department)
                     .Include(c => c.Group)
+                    .Include(c => c.Messages)
                     .Where(c => c.IsActive)
+
                     .AsQueryable();
 
                 // Apply team filtering logic

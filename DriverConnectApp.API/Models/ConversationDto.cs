@@ -23,6 +23,6 @@ namespace DriverConnectApp.API.Models
         public string? WhatsAppGroupId { get; set; }
         public int? GroupId { get; set; }
         public int GroupMemberCount { get; set; }
-        public int TeamId { get; set; }
+        public int? TeamId { get; set; }
     }
 }
