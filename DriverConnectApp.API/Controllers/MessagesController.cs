@@ -286,6 +286,13 @@ namespace DriverConnectApp.API.Controllers
                 messageContent = request.Content ?? string.Empty;
             }
 
+            string? whatsappPhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber;
+
+            if (string.IsNullOrEmpty(whatsappPhoneNumber))
+            {
+                _logger.LogError("❌ Cannot send message: No phone number found for conversation {ConversationId}", conversation.Id);
+                return BadRequest(new { message = "Phone number is required to send messages" });
+            }
             // Create message
             var message = new Message
             {
@@ -352,24 +359,32 @@ namespace DriverConnectApp.API.Controllers
                     TemplateParameters = request.TemplateParameters,
                     TeamId = teamId,
                     Topic = request.Topic,
-                    PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber,
+                    PhoneNumber = whatsappPhoneNumber,
                     LanguageCode = request.LanguageCode ?? "en_US",
                     WhatsAppMessageId = whatsAppMessageId // ✅ Pass the same ID to WhatsApp service
                 };
 
                 // ✅ Run in background to not block the response
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
-                    {
-                        await _whatsAppService.SendMessageAsync(sendRequest, teamId);
-                        _logger.LogInformation("✅ WhatsApp message sent successfully for message ID: {MessageId}", message.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "❌ Failed to send message via WhatsApp for message ID: {MessageId}", message.Id);
-                    }
-                });
+                    await _whatsAppService.SendMessageAsync(sendRequest, teamId);
+                    _logger.LogInformation("✅ WhatsApp message sent successfully for message ID: {MessageId}, Phone: {Phone}",
+                        message.Id, whatsappPhoneNumber);
+
+                    // Update message status to sent
+                    message.Status = MessageStatus.Sent;
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Failed to send message via WhatsApp for message ID: {MessageId}, Phone: {Phone}",
+                        message.Id, whatsappPhoneNumber);
+
+                    // Update message status to failed
+                    message.Status = MessageStatus.Failed;
+                    message.ErrorMessage = ex.Message;
+                    await _context.SaveChangesAsync();
+                }
             }
 
             // Create DTO for response
