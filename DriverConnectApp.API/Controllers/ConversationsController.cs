@@ -166,6 +166,8 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+
+
         [HttpGet("groups/{groupId}")]
         public async Task<ActionResult<GroupDto>> GetGroup(int groupId)
         {
