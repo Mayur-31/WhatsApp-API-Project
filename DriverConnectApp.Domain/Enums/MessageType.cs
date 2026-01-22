@@ -8,6 +8,7 @@
         Audio = 4,
         Document = 5,
         Location = 6,
-        Contact = 7
+        Contact = 7,
+        Template = 8
     }
 }

@@ -6,7 +6,13 @@
       <div class="space-y-4">
         <div>
           <label class="block text-lg font-medium text-gray-700 mb-2">Template Name *</label>
-          <select v-model="templateName" class="w-full border rounded-lg p-3 text-lg" required @change="updateParameters">
+          <select 
+            v-model="templateName" 
+            class="w-full border rounded-lg p-3 text-lg" 
+            required 
+            @change="updateParameters"
+            :disabled="sending"
+          >
             <option value="">Select a template</option>
             <option value="hello_world">Hello World</option>
             <option value="order_confirmation">Order Confirmation</option>
@@ -27,12 +33,17 @@
               :placeholder="`Enter ${param.displayName}`"
               class="w-full border rounded-lg p-3 text-lg"
               required
+              :disabled="sending"
             />
           </div>
         </div>
 
         <div v-else-if="templateName">
           <p class="text-sm text-gray-600">This template doesn't require parameters.</p>
+        </div>
+        
+        <div v-if="errorMessage" class="bg-red-50 border border-red-200 rounded p-3">
+          <p class="text-sm text-red-800">{{ errorMessage }}</p>
         </div>
         
         <div class="bg-blue-50 border border-blue-200 rounded p-3">
@@ -45,12 +56,13 @@
           <button 
             @click="close" 
             class="px-6 py-3 text-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            :disabled="sending"
           >
             Cancel
           </button>
           <button 
             @click="send" 
-            :disabled="!templateName || sending"
+            :disabled="!templateName || sending || isDuplicateSending"
             class="px-6 py-3 text-lg font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md"
           >
             {{ sending ? 'Sending...' : 'Send Template' }}
@@ -64,6 +76,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import api from '@/axios'
+import { useConversationStore } from '@/stores/conversations'
 
 interface TemplateParameter {
   name: string;
@@ -80,12 +93,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  sent: [];
+  sent: [message: any];
 }>()
 
 const templateName = ref('')
 const templateParameters = ref<TemplateParameter[]>([])
 const sending = ref(false)
+const errorMessage = ref<string>('')
+const conversationStore = useConversationStore()
 
 // Define template parameters based on template name
 const templateConfigs: Record<string, { name: string; displayName: string }[]> = {
@@ -120,6 +135,12 @@ const templateConfigs: Record<string, { name: string; displayName: string }[]> =
   ]
 }
 
+// Check if the same message is already being sent
+const isDuplicateSending = computed(() => {
+  const templateContent = `Template: ${templateName.value}`
+  return conversationStore.isMessageSending(props.conversationId, templateContent)
+})
+
 const updateParameters = () => {
   if (templateName.value in templateConfigs) {
     const config = templateConfigs[templateName.value]
@@ -132,15 +153,25 @@ const updateParameters = () => {
   }
 }
 
-watch(templateName, updateParameters)
+watch(templateName, () => {
+  errorMessage.value = ''
+  updateParameters()
+})
 
 const send = async () => {
   if (!templateName.value || !props.phoneNumber || !props.teamId || !props.conversationId) {
-    alert('Please fill all required fields')
+    errorMessage.value = 'Please fill all required fields'
+    return
+  }
+
+  if (isDuplicateSending.value) {
+    errorMessage.value = 'This message is already being sent. Please wait.'
     return
   }
 
   sending.value = true
+  errorMessage.value = ''
+  
   try {
     const templateParams: Record<string, string> = {}
     templateParameters.value.forEach(param => {
@@ -149,26 +180,67 @@ const send = async () => {
       }
     })
 
+    // Generate a temporary message content for display
+    const templateContent = `Template: ${templateName.value}` + 
+      (Object.keys(templateParams).length > 0 ? 
+        ` (${Object.values(templateParams).join(', ')})` : '')
+
+    // Create optimistic message
+    const optimisticMessage = {
+      Content: templateContent,
+      MessageType: 'Template',
+      isFromDriver: false,
+      ConversationId: props.conversationId,
+      TeamId: props.teamId,
+      PhoneNumber: props.phoneNumber,
+      IsTemplateMessage: true,
+      TemplateName: templateName.value,
+      TemplateParameters: templateParams,
+      status: 'sending' as const,
+      SenderName: 'You',
+      SenderPhoneNumber: 'Staff',
+      IsGroupMessage: false
+    }
+
+    // Add optimistic update to store
+    const tempId = conversationStore.addMessageOptimistically(optimisticMessage)
+
     // Send via messages endpoint
     const response = await api.post('/messages', {
-      content: '',
-      messageType: 'Text',
+      content: templateContent,
+      messageType: 'Template', // ✅ FIXED: Use Template type, not Text
       isFromDriver: false,
       conversationId: props.conversationId,
       teamId: props.teamId,
       isTemplateMessage: true,
       templateName: templateName.value,
-      templateParameters: templateParams
+      templateParameters: templateParams,
+      phoneNumber: props.phoneNumber
     })
     
-    emit('sent')
-    close()
+    if (response.data && response.data.Id) {
+      // Update message status with real ID
+      conversationStore.updateMessageStatus(
+        tempId, 
+        response.data.WhatsAppMessageId || `server_${response.data.Id}`,
+        'sent'
+      )
+      
+      emit('sent', response.data)
+      close()
+    } else {
+      throw new Error('Invalid response from server')
+    }
     
-    // Show success message
-    alert('Template message sent successfully!')
   } catch (error: any) {
     console.error('Failed to send template:', error)
-    alert(`Failed to send template message: ${error.response?.data?.error || error.message || 'Unknown error'}`)
+    
+    // Update status to indicate failure
+    if (tempId) {
+      conversationStore.updateMessageStatus(tempId, '', 'failed')
+    }
+    
+    errorMessage.value = `Failed to send template message: ${error.response?.data?.error || error.message || 'Unknown error'}`
   } finally {
     sending.value = false
   }
@@ -177,6 +249,7 @@ const send = async () => {
 const close = () => {
   templateName.value = ''
   templateParameters.value = []
+  errorMessage.value = ''
   emit('close')
 }
 

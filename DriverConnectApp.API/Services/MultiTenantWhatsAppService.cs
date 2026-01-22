@@ -88,61 +88,11 @@ namespace DriverConnectApp.API.Services
             // Handle group messages first
             if (request.IsGroupMessage && !string.IsNullOrEmpty(request.GroupId))
             {
-                var success = await SendGroupMessageAsync(
-                    request.GroupId,
-                    request.Content ?? "",
-                    request.MediaUrl,
-                    Enum.TryParse<MessageType>(request.MessageType, out var groupMessageType) ? groupMessageType : MessageType.Text,
-                    team
-                );
-
-                if (success)
-                {
-                    var conversation = await _context.Conversations
-                        .FirstOrDefaultAsync(c => c.WhatsAppGroupId == request.GroupId && c.IsGroupConversation && c.TeamId == teamId);
-
-                    if (conversation != null)
-                    {
-                        var currentUserName = GetCurrentUserName();
-                        var currentUserId = GetCurrentUserId();
-
-                        var groupMessage = new Message
-                        {
-                            ConversationId = conversation.Id,
-                            Content = request.Content ?? "",
-                            MessageType = Enum.TryParse<MessageType>(request.MessageType, out var msgType) ? msgType : MessageType.Text,
-                            MediaUrl = request.MediaUrl,
-                            FileName = request.FileName,
-                            FileSize = request.FileSize,
-                            MimeType = request.MimeType,
-                            IsFromDriver = false,
-                            IsGroupMessage = true,
-                            SenderPhoneNumber = "System",
-                            SenderName = currentUserName,
-                            SentAt = DateTime.UtcNow,
-                            WhatsAppMessageId = $"web_group_{DateTime.UtcNow.Ticks}",
-                            SentByUserId = currentUserId,
-                            SentByUserName = currentUserName,
-                            IsTemplateMessage = request.IsTemplateMessage,
-                            TemplateName = request.TemplateName,
-                            TemplateParametersJson = request.TemplateParameters != null
-                                ? JsonSerializer.Serialize(request.TemplateParameters)
-                                : null
-                        };
-
-                        _context.Messages.Add(groupMessage);
-                        conversation.LastMessageAt = groupMessage.SentAt;
-                        await _context.SaveChangesAsync();
-                    }
-                }
-
-                return new
-                {
-                    Status = success ? "Sent" : "Failed",
-                    IsGroup = true,
-                    IsTemplate = request.IsTemplateMessage
-                };
+                return await HandleGroupMessage(request, team);
             }
+
+            // ✅ IMPORTANT: For individual messages, we don't create messages here anymore
+            // The message is already created by MessagesController
 
             // Handle template messages for individuals
             if (request.IsTemplateMessage && !string.IsNullOrEmpty(request.TemplateName))
@@ -167,7 +117,17 @@ namespace DriverConnectApp.API.Services
 
                 if (success)
                 {
-                    return await SaveTemplateMessageToDatabase(request, teamId, phoneNumber);
+                    // ✅ FIXED: Don't create message here - already created by MessagesController
+                    _logger.LogInformation("✅ Template message sent via WhatsApp API for phone: {PhoneNumber}", phoneNumber);
+
+                    return new
+                    {
+                        Status = "Sent",
+                        IsTemplate = true,
+                        WhatsAppMessageId = request.WhatsAppMessageId,
+                        PhoneNumber = phoneNumber,
+                        Success = true
+                    };
                 }
                 else
                 {
@@ -217,35 +177,7 @@ namespace DriverConnectApp.API.Services
             var messageType = Enum.TryParse<MessageType>(request.MessageType, out var type)
                 ? type : MessageType.Text;
 
-            var conversationObj = await GetOrCreateConversationAsync(request, driver.Id, team.Id);
-
-            var currentUserNameMsg = GetCurrentUserName();
-            var currentUserIdMsg = GetCurrentUserId();
-
-            var message = new Message
-            {
-                ConversationId = conversationObj.Id,
-                Content = request.Content ?? string.Empty,
-                MessageType = messageType,
-                MediaUrl = request.MediaUrl,
-                FileName = request.FileName,
-                FileSize = request.FileSize,
-                MimeType = request.MimeType,
-                IsFromDriver = false,
-                IsGroupMessage = false,
-                SenderPhoneNumber = "System",
-                SenderName = currentUserNameMsg,
-                SentAt = DateTime.UtcNow,
-                WhatsAppMessageId = $"web_{DateTime.UtcNow.Ticks}",
-                SentByUserId = currentUserIdMsg,
-                SentByUserName = currentUserNameMsg,
-                IsTemplateMessage = false
-            };
-
-            _context.Messages.Add(message);
-            conversationObj.LastMessageAt = message.SentAt;
-            await _context.SaveChangesAsync();
-
+            // ✅ FIXED: Just send to WhatsApp API, don't create message
             var testMode = _configuration.GetValue<bool>("WhatsApp:TestMode", false);
             if (!testMode)
             {
@@ -254,12 +186,14 @@ namespace DriverConnectApp.API.Services
 
             return new
             {
-                MessageId = message.WhatsAppMessageId,
                 Status = "Sent",
                 IsTemplate = false,
-                ConversationId = conversationObj.Id
+                WhatsAppMessageId = request.WhatsAppMessageId,
+                PhoneNumber = driver.PhoneNumber,
+                Success = true
             };
         }
+
 
         private async Task<object> HandleGroupMessage(SendMessageRequest request, Team team)
         {

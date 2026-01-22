@@ -59,6 +59,9 @@ namespace DriverConnectApp.API.Models
         public bool IsTemplateMessage { get; set; }
         public string? TemplateName { get; set; }
 
+        // ✅ ADDED: PhoneNumber property
+        public string? PhoneNumber { get; set; }
+
         // Reactions
         public List<MessageReactionDto> Reactions { get; set; } = new List<MessageReactionDto>();
 

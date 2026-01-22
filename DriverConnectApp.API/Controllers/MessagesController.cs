@@ -67,6 +67,33 @@ namespace DriverConnectApp.API.Controllers
                 if (request == null)
                     return BadRequest(new { message = "Invalid request body" });
 
+                // ✅ ADDED: Check if message already exists to prevent duplicates
+                if (!string.IsNullOrEmpty(request.WhatsAppMessageId))
+                {
+                    var existingMessage = await _context.Messages
+                        .FirstOrDefaultAsync(m => m.WhatsAppMessageId == request.WhatsAppMessageId);
+
+                    if (existingMessage != null)
+                    {
+                        _logger.LogWarning("⚠️ Message already sent with WhatsAppMessageId: {WhatsAppMessageId}", request.WhatsAppMessageId);
+                        return Ok(new MessageDto
+                        {
+                            Id = existingMessage.Id,
+                            Content = existingMessage.Content,
+                            MessageType = existingMessage.MessageType.ToString(),
+                            IsFromDriver = existingMessage.IsFromDriver,
+                            SentAt = existingMessage.SentAt,
+                            ConversationId = existingMessage.ConversationId,
+                            WhatsAppMessageId = existingMessage.WhatsAppMessageId,
+                            Status = existingMessage.Status.ToString(),
+                            IsTemplateMessage = existingMessage.IsTemplateMessage,
+                            TemplateName = existingMessage.TemplateName,
+                            SenderName = existingMessage.SenderName,
+                            SenderPhoneNumber = existingMessage.SenderPhoneNumber
+                        });
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(request.Content) && request.MessageType == "Text" && !request.IsTemplateMessage)
                     return BadRequest(new { message = "Message content is required for non-template text messages" });
 
@@ -112,13 +139,15 @@ namespace DriverConnectApp.API.Controllers
             string? currentUserId)
         {
             // Validate required fields for individual messages
-            if (!request.DriverId.HasValue && !request.ConversationId.HasValue)
+            if (!request.DriverId.HasValue && !request.ConversationId.HasValue && string.IsNullOrEmpty(request.PhoneNumber))
             {
-                return BadRequest(new { message = "DriverId or ConversationId is required for individual messages" });
+                return BadRequest(new { message = "DriverId, ConversationId, or PhoneNumber is required for individual messages" });
             }
 
             // Get or create conversation
             Conversation? conversation = null;
+            Driver? driver = null;
+
             if (request.ConversationId.HasValue)
             {
                 conversation = await _context.Conversations
@@ -127,35 +156,83 @@ namespace DriverConnectApp.API.Controllers
             }
             else if (request.DriverId.HasValue)
             {
+                driver = await _context.Drivers.FindAsync(request.DriverId.Value);
+                if (driver == null)
+                    return BadRequest(new { message = "Driver not found" });
+
                 conversation = await _context.Conversations
                     .Include(c => c.Driver)
-                    .FirstOrDefaultAsync(c => c.DriverId == request.DriverId.Value);
+                    .FirstOrDefaultAsync(c => c.DriverId == driver.Id);
+            }
+            else if (!string.IsNullOrEmpty(request.PhoneNumber))
+            {
+                // Find or create driver by phone number
+                driver = await _context.Drivers
+                    .FirstOrDefaultAsync(d => d.PhoneNumber == request.PhoneNumber);
 
-                if (conversation == null)
+                if (driver == null)
                 {
-                    var driver = await _context.Drivers.FindAsync(request.DriverId.Value);
-                    if (driver == null)
-                        return BadRequest(new { message = "Driver not found" });
-
-                    conversation = new Conversation
+                    // Auto-create driver
+                    driver = new Driver
                     {
-                        DriverId = driver.Id,
-                        Topic = request.Topic ?? "General Conversation",
+                        Name = $"Driver {request.PhoneNumber}",
+                        PhoneNumber = request.PhoneNumber,
                         CreatedAt = DateTime.UtcNow,
-                        IsAnswered = false,
-                        TeamId = driver.TeamId
+                        IsActive = true,
+                        TeamId = request.TeamId ?? 1
                     };
-                    _context.Conversations.Add(conversation);
+                    _context.Drivers.Add(driver);
                     await _context.SaveChangesAsync();
+                    _logger.LogInformation("👤 Auto-created driver: {DriverId} for phone {Phone}", driver.Id, request.PhoneNumber);
                 }
+
+                conversation = await _context.Conversations
+                    .Include(c => c.Driver)
+                    .FirstOrDefaultAsync(c => c.DriverId == driver.Id);
+            }
+
+            // Create conversation if doesn't exist
+            if (conversation == null)
+            {
+                if (driver == null && request.DriverId.HasValue)
+                {
+                    driver = await _context.Drivers.FindAsync(request.DriverId.Value);
+                }
+
+                if (driver == null)
+                    return BadRequest(new { message = "Could not find or create conversation - driver not found" });
+
+                conversation = new Conversation
+                {
+                    DriverId = driver.Id,
+                    Topic = request.Topic ?? $"Conversation with {driver.Name}",
+                    CreatedAt = DateTime.UtcNow,
+                    IsAnswered = false,
+                    TeamId = driver.TeamId
+                };
+                _context.Conversations.Add(conversation);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("✅ Created conversation {ConversationId} for driver {DriverId}", conversation.Id, driver.Id);
             }
 
             if (conversation == null)
                 return BadRequest(new { message = "Could not find or create conversation" });
 
-            // Convert message type
+            // Convert message type - ✅ FIXED: Template messages should have Template type
             if (!Enum.TryParse<MessageType>(request.MessageType, out var messageType))
-                messageType = MessageType.Text;
+            {
+                messageType = request.IsTemplateMessage ? MessageType.Template : MessageType.Text;
+            }
+
+            // ✅ ADDED: Generate WhatsApp Message ID if not provided
+            var whatsAppMessageId = request.WhatsAppMessageId;
+            if (string.IsNullOrEmpty(whatsAppMessageId))
+            {
+                whatsAppMessageId = request.IsTemplateMessage
+                    ? $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}"
+                    : $"web_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
+            }
 
             // Handle reply functionality
             Message? replyToMessage = null;
@@ -180,11 +257,40 @@ namespace DriverConnectApp.API.Controllers
                 mediaUrl = mediaUrl.StartsWith("/") ? $"{baseUrl}{mediaUrl}" : $"{baseUrl}/{mediaUrl}";
             }
 
+            // ✅ FIXED: Create proper message content for template messages
+            string messageContent;
+            if (request.IsTemplateMessage)
+            {
+                if (!string.IsNullOrEmpty(request.Content))
+                {
+                    messageContent = request.Content;
+                }
+                else if (!string.IsNullOrEmpty(request.TemplateName))
+                {
+                    messageContent = $"Template: {request.TemplateName}";
+
+                    // Add parameters if available
+                    if (request.TemplateParameters != null && request.TemplateParameters.Any())
+                    {
+                        var paramsText = string.Join(", ", request.TemplateParameters.Select(kv => $"{kv.Key}: {kv.Value}"));
+                        messageContent += $" ({paramsText})";
+                    }
+                }
+                else
+                {
+                    messageContent = "Template message";
+                }
+            }
+            else
+            {
+                messageContent = request.Content ?? string.Empty;
+            }
+
             // Create message
             var message = new Message
             {
                 ConversationId = conversation.Id,
-                Content = request.Content,
+                Content = messageContent,
                 MessageType = messageType,
                 MediaUrl = mediaUrl,
                 FileName = request.FileName,
@@ -198,7 +304,7 @@ namespace DriverConnectApp.API.Controllers
                 SenderPhoneNumber = request.SenderPhoneNumber ?? (request.IsFromDriver ? conversation.Driver?.PhoneNumber : "System"),
                 SenderName = request.SenderName ?? (request.IsFromDriver ? conversation.Driver?.Name : currentUserName),
                 SentAt = DateTime.UtcNow,
-                WhatsAppMessageId = request.WhatsAppMessageId ?? $"web_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
+                WhatsAppMessageId = whatsAppMessageId, // ✅ Use the generated ID
                 SentByUserId = request.IsFromDriver ? null : currentUserId,
                 SentByUserName = request.IsFromDriver ? null : currentUserName,
                 ReplyToMessageId = request.ReplyToMessageId,
@@ -214,22 +320,25 @@ namespace DriverConnectApp.API.Controllers
                 TemplateName = request.TemplateName,
                 TemplateParametersJson = request.TemplateParameters != null
                     ? JsonSerializer.Serialize(request.TemplateParameters)
-                    : null
+                    : null,
+                Status = MessageStatus.Sent // ✅ Set initial status
             };
 
             _context.Messages.Add(message);
             conversation.LastMessageAt = message.SentAt;
+
+            // ✅ IMPORTANT: Save immediately so frontend can get the message ID
             await _context.SaveChangesAsync();
 
             // Send to WhatsApp service if not from driver
             if (!request.IsFromDriver)
             {
-                var teamId = conversation.TeamId ?? 1;
+                var teamId = conversation.TeamId ?? request.TeamId ?? 1;
 
                 var sendRequest = new SendMessageRequest
                 {
-                    Content = request.Content,
-                    MessageType = request.MessageType,
+                    Content = messageContent,
+                    MessageType = request.IsTemplateMessage ? "Template" : request.MessageType,
                     MediaUrl = mediaUrl,
                     FileName = request.FileName,
                     FileSize = request.FileSize,
@@ -243,12 +352,24 @@ namespace DriverConnectApp.API.Controllers
                     TemplateParameters = request.TemplateParameters,
                     TeamId = teamId,
                     Topic = request.Topic,
-                    // ✅ CRITICAL: Pass phone number for template messages
-                    PhoneNumber = conversation.Driver?.PhoneNumber,
-                    LanguageCode = request.LanguageCode ?? "en_US"
+                    PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber,
+                    LanguageCode = request.LanguageCode ?? "en_US",
+                    WhatsAppMessageId = whatsAppMessageId // ✅ Pass the same ID to WhatsApp service
                 };
 
-                await _whatsAppService.SendMessageAsync(sendRequest, teamId);
+                // ✅ Run in background to not block the response
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _whatsAppService.SendMessageAsync(sendRequest, teamId);
+                        _logger.LogInformation("✅ WhatsApp message sent successfully for message ID: {MessageId}", message.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "❌ Failed to send message via WhatsApp for message ID: {MessageId}", message.Id);
+                    }
+                });
             }
 
             // Create DTO for response
@@ -281,7 +402,9 @@ namespace DriverConnectApp.API.Controllers
                 SenderPhoneNumber = message.SenderPhoneNumber,
                 SenderName = message.SenderName,
                 IsTemplateMessage = message.IsTemplateMessage,
-                TemplateName = message.TemplateName
+                TemplateName = message.TemplateName,
+                Status = message.Status.ToString(), // ✅ Include status
+                PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber
             };
 
             if (replyToMessage != null)
@@ -302,11 +425,12 @@ namespace DriverConnectApp.API.Controllers
                 };
             }
 
-            _logger.LogInformation("✅ Message sent successfully with staff context: {StaffName}, Reply: {HasReply}",
-                currentUserName, message.ReplyToMessageId.HasValue);
+            _logger.LogInformation("✅ Message created successfully: ID={MessageId}, WhatsAppID={WhatsAppMessageId}, Template={IsTemplate}",
+                message.Id, message.WhatsAppMessageId, message.IsTemplateMessage);
 
             return Ok(messageDto);
         }
+
 
         private async Task<IActionResult> HandleGroupMessage(
             MessageRequest request,

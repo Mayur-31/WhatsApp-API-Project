@@ -41,8 +41,8 @@
         // Add missing Topic property
         public string? Topic { get; set; }
 
-        // ADD THESE MISSING PROPERTIES:
-        //public string? PhoneNumber { get; set; }
+        // ✅ FIXED: Uncommented and added PhoneNumber property
+        public string? PhoneNumber { get; set; }
         public string? LanguageCode { get; set; } = "en_US";
     }
 }
