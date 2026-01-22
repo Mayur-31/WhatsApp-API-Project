@@ -52,6 +52,8 @@ namespace DriverConnectApp.API.Controllers
             _whatsAppService = whatsAppService;
         }
 
+
+
         [HttpPost]
         [RequestSizeLimit(524288000)]
         public async Task<IActionResult> SendMessage([FromBody] MessageRequest request)
@@ -241,6 +243,7 @@ namespace DriverConnectApp.API.Controllers
                     TemplateParameters = request.TemplateParameters,
                     TeamId = teamId,
                     Topic = request.Topic,
+                    // ✅ CRITICAL: Pass phone number for template messages
                     PhoneNumber = conversation.Driver?.PhoneNumber,
                     LanguageCode = request.LanguageCode ?? "en_US"
                 };
@@ -1153,32 +1156,12 @@ namespace DriverConnectApp.API.Controllers
                 var baseUrl = $"{Request.Scheme}://{Request.Host}";
                 var mediaUrl = $"{baseUrl}/uploads/{fileName}";
 
-                // Get MIME type
-                string mimeType = file.ContentType;
-                if (string.IsNullOrEmpty(mimeType) || mimeType == "application/octet-stream")
-                {
-                    mimeType = GetMimeTypeFromExtension(fileExtension);
-                }
-
-                // Upload to WhatsApp if needed (optional)
-                string? whatsAppMediaId = null;
-                try
-                {
-                    var teamId = 1; // Get from current user or request
-                    whatsAppMediaId = await UploadToWhatsApp(filePath, mimeType, teamId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to upload to WhatsApp, continuing with local storage");
-                }
-
                 var response = new FileUploadResponse
                 {
                     FileName = file.FileName,
                     StoredFileName = fileName,
                     FileSize = finalFileSize,
-                    MimeType = mimeType,
-                    WhatsAppMediaId = whatsAppMediaId,
+                    MimeType = file.ContentType,
                     MediaUrl = mediaUrl,
                     MessageType = messageType,
                     WasCompressed = wasCompressed,
@@ -1193,88 +1176,6 @@ namespace DriverConnectApp.API.Controllers
                 _logger.LogError(ex, "Error uploading file");
                 return StatusCode(500, new { message = "Failed to upload file", error = ex.Message });
             }
-        }
-
-        [HttpGet("download/{fileName}")]
-        public IActionResult DownloadFile(string fileName)
-        {
-            try
-            {
-                var uploadsDir = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
-                var filePath = Path.Combine(uploadsDir, fileName);
-
-                if (!System.IO.File.Exists(filePath))
-                    return NotFound(new { message = "File not found" });
-
-                var fileBytes = System.IO.File.ReadAllBytes(filePath);
-                var mimeType = GetMimeTypeFromExtension(Path.GetExtension(fileName));
-
-                // ✅ FIXED: Use the correct overload for File method
-                return File(fileBytes, mimeType, fileName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error downloading file {FileName}", fileName);
-                return StatusCode(500, new { message = "Failed to download file", error = ex.Message });
-            }
-        }
-
-        private string GetMimeTypeFromExtension(string extension)
-        {
-            return extension.ToLower() switch
-            {
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                ".bmp" => "image/bmp",
-                ".webp" => "image/webp",
-                ".mp4" => "video/mp4",
-                ".avi" => "video/x-msvideo",
-                ".mov" => "video/quicktime",
-                ".wmv" => "video/x-ms-wmv",
-                ".webm" => "video/webm",
-                ".mp3" => "audio/mpeg",
-                ".wav" => "audio/wav",
-                ".ogg" => "audio/ogg",
-                ".m4a" => "audio/mp4",
-                ".pdf" => "application/pdf",
-                ".doc" => "application/msword",
-                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ".xls" => "application/vnd.ms-excel",
-                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                ".txt" => "text/plain",
-                ".zip" => "application/zip",
-                ".rar" => "application/x-rar-compressed",
-                _ => "application/octet-stream"
-            };
-        }
-
-        private async Task<string?> UploadToWhatsApp(string filePath, string mimeType, int teamId)
-        {
-            var team = await _context.Teams.FindAsync(teamId);
-            if (team == null) return null;
-
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
-
-            using var form = new MultipartFormDataContent();
-            using var fileStream = System.IO.File.OpenRead(filePath);
-            form.Add(new StreamContent(fileStream), "file", Path.GetFileName(filePath));
-            form.Add(new StringContent("whatsapp"), "messaging_product");
-            form.Add(new StringContent(mimeType), "type");
-
-            var response = await client.PostAsync(
-                $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/media",
-                form);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
-                return result.GetProperty("id").GetString();
-            }
-
-            return null;
         }
 
         private async Task<CompressionResult> CompressImageAsync(IFormFile file, string outputPath, long targetSize)
@@ -1525,72 +1426,55 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserId = currentUser?.Id;
 
                 // Send template message - Use driver.TeamId.Value since we've checked it's not null
-                // Create a readable message content
-                string messageContent;
-                if (request.TemplateParameters != null && request.TemplateParameters.Any())
+                var success = await _whatsAppService.SendTemplateMessageAsync(
+                    driver.PhoneNumber,
+                    request.TemplateName,
+                    request.TemplateParameters ?? new Dictionary<string, string>(),
+                    driver.TeamId.Value, // This is the fix - use .Value to get the non-nullable int
+                    request.LanguageCode
+                );
+
+                if (success)
                 {
-                    var parameters = string.Join(", ", request.TemplateParameters.Values);
-                    messageContent = $"📋 {request.TemplateName}: {parameters}";
+                    // Save message to database
+                    var message = new Message
+                    {
+                        ConversationId = conversation.Id,
+                        Content = $"Template: {request.TemplateName}",
+                        MessageType = MessageType.Text,
+                        IsFromDriver = false,
+                        IsGroupMessage = false,
+                        SenderPhoneNumber = "System",
+                        SenderName = currentUserName,
+                        SentAt = DateTime.UtcNow,
+                        WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
+                        SentByUserId = currentUserId,
+                        SentByUserName = currentUserName,
+                        IsTemplateMessage = true,
+                        TemplateName = request.TemplateName,
+                        TemplateParametersJson = request.TemplateParameters != null
+                            ? JsonSerializer.Serialize(request.TemplateParameters)
+                            : null
+                    };
+
+                    _context.Messages.Add(message);
+                    conversation.LastMessageAt = message.SentAt;
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Template message sent successfully to driver {DriverId}", driver.Id);
+
+                    return Ok(new
+                    {
+                        message = "Template message sent successfully",
+                        messageId = message.Id,
+                        conversationId = conversation.Id,
+                        isTemplate = true
+                    });
                 }
                 else
                 {
-                    messageContent = $"📋 Template: {request.TemplateName}";
+                    return StatusCode(500, new { message = "Failed to send template message via WhatsApp API" });
                 }
-
-                // Save message immediately
-                var message = new Message
-                {
-                    ConversationId = conversation.Id,
-                    Content = messageContent,  // Show actual content
-                    MessageType = MessageType.Text,
-                    IsFromDriver = false,
-                    SenderName = currentUserName,
-                    SentAt = DateTime.UtcNow,
-                    WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
-                    IsTemplateMessage = true,
-                    TemplateName = request.TemplateName,
-                    TemplateParametersJson = request.TemplateParameters != null
-                        ? JsonSerializer.Serialize(request.TemplateParameters)
-                        : null,
-                    Status = MessageStatus.Pending  // New field
-                };
-
-                _context.Messages.Add(message);
-                await _context.SaveChangesAsync();
-
-                // Send to WhatsApp in background
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var success = await _whatsAppService.SendTemplateMessageAsync(
-                            driver.PhoneNumber,
-                            request.TemplateName,
-                            request.TemplateParameters ?? new Dictionary<string, string>(),
-                            driver.TeamId.Value,
-                            request.LanguageCode);
-
-                        // Update message status
-                        message.Status = success ? MessageStatus.Sent : MessageStatus.Failed;
-                        await _context.SaveChangesAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Background template send failed");
-                        message.Status = MessageStatus.Failed;
-                        await _context.SaveChangesAsync();
-                    }
-                });
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Template message sent",
-                    messageId = message.Id,
-                    content = messageContent,
-                    sentAt = message.SentAt,
-                    isTemplate = true
-                });
             }
             catch (Exception ex)
             {
@@ -1600,7 +1484,6 @@ namespace DriverConnectApp.API.Controllers
         }
     }
 
-    // Nested classes for the controller
     public class CompressionResult
     {
         public long FileSize { get; set; }

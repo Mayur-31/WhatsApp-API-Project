@@ -22,12 +22,6 @@ namespace DriverConnectApp.API.Models.WhatsApp
         [JsonPropertyName("image")]
         public Image? Image { get; set; }
 
-        [JsonPropertyName("video")]
-        public Video? Video { get; set; } // Add this
-
-        [JsonPropertyName("audio")]
-        public Audio? Audio { get; set; } // Add this
-
         [JsonPropertyName("document")]
         public Document? Document { get; set; }
 
@@ -63,37 +57,6 @@ namespace DriverConnectApp.API.Models.WhatsApp
         [JsonPropertyName("caption")]
         public string? Caption { get; set; }
 
-        [JsonPropertyName("mime_type")]
-        public string? MimeType { get; set; }
-
-        [JsonPropertyName("sha256")]
-        public string? Sha256 { get; set; }
-
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        public string? Link { get; set; }
-    }
-
-    public class Video
-    {
-        [JsonPropertyName("caption")]
-        public string? Caption { get; set; }
-
-        [JsonPropertyName("mime_type")]
-        public string? MimeType { get; set; }
-
-        [JsonPropertyName("sha256")]
-        public string? Sha256 { get; set; }
-
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        public string? Link { get; set; }
-    }
-
-    public class Audio
-    {
         [JsonPropertyName("mime_type")]
         public string? MimeType { get; set; }
 

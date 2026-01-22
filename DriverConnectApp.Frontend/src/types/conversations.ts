@@ -337,4 +337,3 @@ export interface AddParticipantsRequest {
 export interface RemoveParticipantsRequest {
   ParticipantIds: number[];
 }
-

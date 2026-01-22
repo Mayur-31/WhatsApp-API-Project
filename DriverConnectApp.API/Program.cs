@@ -6,9 +6,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.SignalR;
-using DriverConnectApp.API.Hubs;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,8 +20,7 @@ builder.Services.AddControllers()
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSignalR();
-builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
+
 // ADD THIS: HttpClient factory registration
 builder.Services.AddHttpClient();
 
@@ -63,8 +59,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:3000", "https://localhost:5001", "http://localhost:5000", "http://157.180.87.7:5001",
                 "https://157.180.87.7:5001",
                 "https://onestopvan.work.gd",
-                "http://onestopvan.work.gd",
-                "wss://onestopvan.work.gd" )
+                "http://onestopvan.work.gd")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()
@@ -130,7 +125,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 // Serve wwwroot static files
 app.UseStaticFiles();
-app.MapHub<MessageHub>("/hubs/message");
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
