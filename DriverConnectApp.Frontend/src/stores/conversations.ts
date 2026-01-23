@@ -3,13 +3,19 @@ import { ref, computed, reactive } from 'vue'
 import type { ConversationDto, MessageDto } from '@/types/conversations'
 import api from '@/axios'
 
+// Extended MessageDto with optimistic fields
+interface MessageDtoWithTemp extends MessageDto {
+  tempId?: number;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+}
+
 export const useConversationStore = defineStore('conversation', () => {
   const selectedTeamId = ref<number>(0)
   const currentConversations = ref<ConversationDto[]>([])
-  const currentMessages = ref<MessageDto[]>([])
+  const currentMessages = ref<MessageDtoWithTemp[]>([])
   const currentConversationId = ref<number | null>(null)
-  const messageSendingQueue = reactive<Map<number, MessageDto>>(new Map())
-  const webhookMessages = reactive<Map<string, MessageDto>>(new Map())
+  const messageSendingQueue = reactive<Map<number, MessageDtoWithTemp>>(new Map())
+  const webhookMessages = reactive<Map<string, MessageDtoWithTemp>>(new Map())
   
   const setSelectedTeamId = (teamId: number) => {
     selectedTeamId.value = teamId
@@ -21,7 +27,7 @@ export const useConversationStore = defineStore('conversation', () => {
   
   const setMessages = (messages: MessageDto[]) => {
     // Sort messages by timestamp to ensure correct order
-    currentMessages.value = messages.sort((a, b) => 
+    currentMessages.value = (messages as MessageDtoWithTemp[]).sort((a, b) => 
       new Date(a.SentAt).getTime() - new Date(b.SentAt).getTime()
     )
   }
@@ -30,8 +36,8 @@ export const useConversationStore = defineStore('conversation', () => {
     currentConversationId.value = conversationId
   }
   
-  const addMessage = (message: MessageDto) => {
-    // ✅ CRITICAL FIX: Deduplicate by WhatsAppMessageId (not tempId)
+  const addMessage = (message: MessageDtoWithTemp) => {
+    // ✅ Deduplicate by WhatsAppMessageId (not tempId)
     const existingIndex = currentMessages.value.findIndex(m => 
       m.WhatsAppMessageId === message.WhatsAppMessageId || 
       (m.tempId && m.tempId === message.tempId)
@@ -50,11 +56,11 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
   
-  const addMessageOptimistically = (message: MessageDto): number => {
+  const addMessageOptimistically = (message: MessageDtoWithTemp): number => {
     // Generate a temporary ID for optimistic update
     const tempId = Date.now() + Math.floor(Math.random() * 1000)
     
-    const optimisticMessage: MessageDto = {
+    const optimisticMessage: MessageDtoWithTemp = {
       ...message,
       tempId,
       status: 'sending',
@@ -70,7 +76,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
   
   const updateMessageFromWebhook = (webhookMessage: MessageDto) => {
-    // ✅ CRITICAL: Update by WhatsAppMessageId, not tempId
+    // ✅ Update by WhatsAppMessageId, not tempId
     const index = currentMessages.value.findIndex(m => 
       m.WhatsAppMessageId === webhookMessage.WhatsAppMessageId ||
       (m.tempId && webhookMessage.WhatsAppMessageId?.includes(`temp_${m.tempId}`))
@@ -81,12 +87,12 @@ export const useConversationStore = defineStore('conversation', () => {
       const existingMessage = currentMessages.value[index]
       
       // Keep optimistic data if available
-      const updatedMessage: MessageDto = {
-        ...webhookMessage,
+      const updatedMessage: MessageDtoWithTemp = {
+        ...webhookMessage as MessageDtoWithTemp,
         tempId: existingMessage.tempId, // Preserve tempId
-        status: webhookMessage.status || 'sent',
+        status: webhookMessage.Status?.toLowerCase() as any || 'sent',
         // Preserve other optimistic fields
-        conversationId: existingMessage.ConversationId || webhookMessage.ConversationId,
+        ConversationId: existingMessage.ConversationId || webhookMessage.ConversationId,
         SentAt: webhookMessage.SentAt || existingMessage.SentAt
       }
       
@@ -94,12 +100,36 @@ export const useConversationStore = defineStore('conversation', () => {
       _logger.log(`🔄 Updated from webhook: ${webhookMessage.WhatsAppMessageId}`)
     } else {
       // Add new message from webhook
-      addMessage(webhookMessage)
+      addMessage(webhookMessage as MessageDtoWithTemp)
       _logger.log(`➕ New from webhook: ${webhookMessage.WhatsAppMessageId}`)
     }
   }
   
-  const updateMessageStatus = (tempId: number, whatsAppMessageId: string, status: MessageDto['status']) => {
+  // ✅ NEW: Update message with backend response data
+  const updateMessageWithBackendData = (tempId: number, backendMessage: MessageDtoWithTemp) => {
+    const index = currentMessages.value.findIndex(m => m.tempId === tempId)
+    
+    if (index !== -1) {
+      // Merge backend data with optimistic message
+      const updatedMessage: MessageDtoWithTemp = {
+        ...currentMessages.value[index],
+        ...backendMessage,
+        tempId: undefined, // Clear temp ID
+        status: 'sent' as const
+      }
+      
+      currentMessages.value[index] = updatedMessage
+      messageSendingQueue.delete(tempId)
+      
+      _logger.log(`✅ Message updated from backend: tempId=${tempId}, content=${updatedMessage.Content.substring(0, 50)}...`)
+    } else {
+      _logger.log(`⚠️ Could not find message with tempId=${tempId}`)
+      // Add as new message
+      addMessage(backendMessage)
+    }
+  }
+  
+  const updateMessageStatus = (tempId: number, whatsAppMessageId: string, status: MessageDtoWithTemp['status']) => {
     const index = currentMessages.value.findIndex(m => m.tempId === tempId)
     
     if (index !== -1) {
@@ -158,6 +188,7 @@ export const useConversationStore = defineStore('conversation', () => {
     addMessage,
     addMessageOptimistically,
     updateMessageFromWebhook,
+    updateMessageWithBackendData, // ✅ NEW
     updateMessageStatus,
     updateConversation,
     isMessageSending

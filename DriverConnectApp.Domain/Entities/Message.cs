@@ -61,7 +61,7 @@ namespace DriverConnectApp.Domain.Entities
 
         [ForeignKey("ReplyToMessageId")]
         public virtual Message? ReplyToMessage { get; set; }
-
+        public string? LocalMessageId { get; set; }
         public string? ReplyToMessageContent { get; set; }
         public string? ReplyToSenderName { get; set; }
 
@@ -108,6 +108,7 @@ namespace DriverConnectApp.Domain.Entities
         Sent = 1,
         Delivered = 2,
         Read = 3,
-        Failed = 4
+        Failed = 4,
+        Pending = 5
     }
 }

@@ -1583,6 +1583,27 @@ namespace DriverConnectApp.API.Controllers
         }
 
 
+        private async Task UpdateMessageWithWhatsAppId(
+    string phoneNumber,
+    string templateName,
+    string whatsAppMessageId)
+        {
+            // Find recent template message without WhatsApp ID
+            var message = await _context.Messages
+                .Where(m => m.SenderPhoneNumber == phoneNumber)
+                .Where(m => m.TemplateName == templateName)
+                .Where(m => m.WhatsAppMessageId == null)
+                .Where(m => m.SentAt > DateTime.UtcNow.AddMinutes(-5)) // Recent messages only
+                .OrderByDescending(m => m.SentAt)
+                .FirstOrDefaultAsync();
+
+            if (message != null)
+            {
+                message.WhatsAppMessageId = whatsAppMessageId;
+                message.Status = MessageStatus.Sent;
+                await _context.SaveChangesAsync();
+            }
+        }
         // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
         [HttpPost("send-template")]
         public async Task<IActionResult> SendTemplateMessage([FromBody] SendTemplateByDriverIdRequest request)
@@ -1600,9 +1621,7 @@ namespace DriverConnectApp.API.Controllers
                     return NotFound(new { message = "Driver not found" });
 
                 if (!driver.TeamId.HasValue)
-                {
-                    return BadRequest(new { message = "Driver is not assigned to a team. Cannot send template message." });
-                }
+                    return BadRequest(new { message = "Driver is not assigned to a team" });
 
                 // Get or create conversation
                 var conversation = await _context.Conversations
@@ -1627,11 +1646,7 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserName = currentUser?.FullName ?? currentUser?.UserName ?? "Staff";
                 var currentUserId = currentUser?.Id;
 
-                // ✅ GENERATE ACTUAL TEMPLATE CONTENT BEFORE SENDING
-                string actualMessageContent = GenerateTemplateContent(request.TemplateName, request.TemplateParameters);
-                _logger.LogInformation("📝 Generated template content: {Content}", actualMessageContent);
-
-                // Send template message
+                // ✅ CORRECT: Send template via WhatsApp API
                 var success = await _whatsAppService.SendTemplateMessageAsync(
                     driver.PhoneNumber,
                     request.TemplateName,
@@ -1645,18 +1660,25 @@ namespace DriverConnectApp.API.Controllers
                     return StatusCode(500, new { message = "Failed to send template message via WhatsApp API" });
                 }
 
-                // ✅ SAVE MESSAGE WITH ACTUAL CONTENT
+                // ✅ CORRECT: Generate a LOCAL tracking ID (NOT pretending to be WhatsApp ID)
+                var localMessageId = $"local_template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
+
+                // ✅ CORRECT: Store ONLY template metadata
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
-                    Content = actualMessageContent, // ✅ Use actual content, not "Template: hello_world"
-                    MessageType = MessageType.Template, // ✅ Use Template type
+                    // ✅ Store accurate description, NOT guessed WhatsApp content
+                    Content = $"📋 Template: {request.TemplateName}",
+                    MessageType = MessageType.Template,
                     IsFromDriver = false,
                     IsGroupMessage = false,
                     SenderPhoneNumber = "System",
                     SenderName = currentUserName,
                     SentAt = DateTime.UtcNow,
-                    WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
+                    // ✅ CRITICAL: Store NULL for WhatsAppMessageId (will be updated by webhook)
+                    WhatsAppMessageId = null,
+                    // ✅ Store local tracking ID separately
+                    LocalMessageId = localMessageId,
                     SentByUserId = currentUserId,
                     SentByUserName = currentUserName,
                     IsTemplateMessage = true,
@@ -1664,15 +1686,14 @@ namespace DriverConnectApp.API.Controllers
                     TemplateParametersJson = request.TemplateParameters != null
                         ? JsonSerializer.Serialize(request.TemplateParameters)
                         : null,
-                    Status = MessageStatus.Sent
+                    Status = MessageStatus.Pending // Set to Pending until webhook confirms
                 };
 
                 _context.Messages.Add(message);
                 conversation.LastMessageAt = message.SentAt;
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("✅ Template message sent successfully to driver {DriverId}: {Content}",
-                    driver.Id, message.Content);
+                _logger.LogInformation("✅ Template message sent successfully to driver {DriverId}", driver.Id);
 
                 return Ok(new
                 {
@@ -1680,7 +1701,10 @@ namespace DriverConnectApp.API.Controllers
                     messageId = message.Id,
                     conversationId = conversation.Id,
                     isTemplate = true,
-                    actualContent = message.Content
+                    localMessageId = localMessageId,
+                    displayContent = message.Content,
+                    templateName = request.TemplateName,
+                    templateParameters = request.TemplateParameters
                 });
             }
             catch (Exception ex)

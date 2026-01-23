@@ -137,8 +137,8 @@ const templateConfigs: Record<string, { name: string; displayName: string }[]> =
 
 // Check if the same message is already being sent
 const isDuplicateSending = computed(() => {
-  const templateContent = `Template: ${templateName.value}`
-  return conversationStore.isMessageSending(props.conversationId, templateContent)
+  const templateKey = `template_${templateName.value}`
+  return conversationStore.isMessageSending(props.conversationId, templateKey)
 })
 
 const updateParameters = () => {
@@ -158,6 +158,31 @@ watch(templateName, () => {
   updateParameters()
 })
 
+// Get driver ID from conversation
+const getDriverIdFromConversation = async (): Promise<number> => {
+  try {
+    // Try to get from conversation store first
+    const conversation = conversationStore.currentConversations.find(
+      c => c.Id === props.conversationId
+    )
+    
+    if (conversation && conversation.DriverId) {
+      return conversation.DriverId
+    }
+    
+    // If not found, fetch from API
+    const response = await api.get(`/conversations/${props.conversationId}`)
+    if (response.data && response.data.DriverId) {
+      return response.data.DriverId
+    }
+    
+    throw new Error('Could not find driver ID for this conversation')
+  } catch (error) {
+    console.error('Error getting driver ID:', error)
+    throw error
+  }
+}
+
 const send = async () => {
   if (!templateName.value || !props.phoneNumber || !props.teamId || !props.conversationId) {
     errorMessage.value = 'Please fill all required fields'
@@ -172,6 +197,8 @@ const send = async () => {
   sending.value = true
   errorMessage.value = ''
   
+  let tempId: number | undefined
+  
   try {
     const templateParams: Record<string, string> = {}
     templateParameters.value.forEach(param => {
@@ -180,51 +207,64 @@ const send = async () => {
       }
     })
 
-    // Generate a temporary message content for display
-    const templateContent = `Template: ${templateName.value}` + 
-      (Object.keys(templateParams).length > 0 ? 
-        ` (${Object.values(templateParams).join(', ')})` : '')
-
-    // Create optimistic message
+    // ✅ CORRECT: Create optimistic message with ACCURATE placeholder
     const optimisticMessage = {
-      Content: templateContent,
+      Id: 0,
+      // ✅ Display what we ACTUALLY know - template name + parameters
+      Content: `📋 Template: ${templateName.value}${Object.keys(templateParams).length > 0 ? ` (${Object.values(templateParams).join(', ')})` : ''}`,
       MessageType: 'Template',
-      isFromDriver: false,
+      IsFromDriver: false,
       ConversationId: props.conversationId,
       TeamId: props.teamId,
       PhoneNumber: props.phoneNumber,
       IsTemplateMessage: true,
       TemplateName: templateName.value,
       TemplateParameters: templateParams,
-      status: 'sending' as const,
+      Status: 'sending',
       SenderName: 'You',
       SenderPhoneNumber: 'Staff',
-      IsGroupMessage: false
+      IsGroupMessage: false,
+      SentAt: new Date().toISOString(),
+      FormattedDate: new Date().toLocaleDateString(),
+      FormattedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      WhatsAppMessageId: '',
+      status: 'sending' as const
     }
 
     // Add optimistic update to store
-    const tempId = conversationStore.addMessageOptimistically(optimisticMessage)
+    tempId = conversationStore.addMessageOptimistically(optimisticMessage as any)
 
-    // Send via messages endpoint
-    const response = await api.post('/messages', {
-      content: templateContent,
-      messageType: 'Template', // ✅ FIXED: Use Template type, not Text
-      isFromDriver: false,
-      conversationId: props.conversationId,
-      teamId: props.teamId,
-      isTemplateMessage: true,
+    // ✅ Get driver ID for the template API
+    const driverId = await getDriverIdFromConversation()
+    
+    if (!driverId) {
+      throw new Error('Could not find driver ID for this conversation')
+    }
+
+    // ✅ Use the CORRECT endpoint for template messages
+    const response = await api.post('/messages/send-template', {
+      driverId: driverId,
       templateName: templateName.value,
       templateParameters: templateParams,
-      phoneNumber: props.phoneNumber
+      teamId: props.teamId,
+      languageCode: 'en_US'
     })
     
-    if (response.data && response.data.Id) {
-      // Update message status with real ID
-      conversationStore.updateMessageStatus(
-        tempId, 
-        response.data.WhatsAppMessageId || `server_${response.data.Id}`,
-        'sent'
-      )
+    if (response.data && response.data.messageId) {
+      // ✅ Create updated message with backend data
+      const updatedMessage = {
+        ...optimisticMessage,
+        Id: response.data.messageId,
+        // ✅ Use displayContent or fallback to our placeholder
+        Content: response.data.actualContent || `📋 Template: ${templateName.value}`,
+        WhatsAppMessageId: response.data.whatsAppMessageId || `template_${response.data.messageId}`,
+        Status: 'sent',
+        status: 'sent' as const,
+        tempId: undefined
+      }
+      
+      // Update optimistic message with backend data
+      conversationStore.updateMessageWithBackendData(tempId, updatedMessage)
       
       emit('sent', response.data)
       close()
