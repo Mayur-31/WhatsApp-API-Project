@@ -409,38 +409,40 @@ namespace DriverConnectApp.API.Controllers
             }
             else if (!request.IsFromDriver && request.IsTemplateMessage)
             {
-                // ✅ Handle template messages SEPARATELY
+                // ✅ FIX: Send template IMMEDIATELY and check success BEFORE returning
                 var teamId = conversation.TeamId ?? request.TeamId ?? 1;
                 var targetPhone = conversation.Driver?.PhoneNumber ?? request.PhoneNumber;
 
                 if (!string.IsNullOrEmpty(targetPhone))
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var success = await _whatsAppService.SendTemplateMessageAsync(
-                                targetPhone,
-                                request.TemplateName!,
-                                request.TemplateParameters ?? new Dictionary<string, string>(),
-                                teamId,
-                                request.LanguageCode ?? "en_US"
-                            );
+                    _logger.LogInformation("🚀 Sending template via WhatsApp: {Template}", request.TemplateName);
 
-                            if (success)
-                            {
-                                _logger.LogInformation("✅ Template sent via WhatsApp: {TemplateName}", request.TemplateName);
-                            }
-                            else
-                            {
-                                _logger.LogError("❌ Failed to send template: {TemplateName}", request.TemplateName);
-                            }
-                        }
-                        catch (Exception ex)
+                    var templateSuccess = await _whatsAppService.SendTemplateMessageAsync(
+                        targetPhone,
+                        request.TemplateName!,
+                        request.TemplateParameters ?? new Dictionary<string, string>(),
+                        teamId,
+                        request.LanguageCode ?? "en_US"
+                    );
+
+                    if (!templateSuccess)
+                    {
+                        // ❌ WhatsApp failed - update message status
+                        message.Status = MessageStatus.Failed;
+                        await _context.SaveChangesAsync();
+
+                        _logger.LogError("❌ WhatsApp template sending failed: {Template}", request.TemplateName);
+
+                        // Return error to frontend
+                        return StatusCode(500, new
                         {
-                            _logger.LogError(ex, "❌ Error sending template: {TemplateName}", request.TemplateName);
-                        }
-                    });
+                            message = "Failed to send template via WhatsApp. Check logs.",
+                            templateName = request.TemplateName,
+                            success = false
+                        });
+                    }
+
+                    _logger.LogInformation("✅ Template sent successfully: {Template}", request.TemplateName);
                 }
             }
 

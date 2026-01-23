@@ -107,6 +107,7 @@ namespace DriverConnectApp.Domain.Entities
     {
         Sent = 1,
         Delivered = 2,
-        Read = 3
+        Read = 3,
+        Failed = 4
     }
 }

@@ -563,89 +563,90 @@ namespace DriverConnectApp.API.Services
                     return false;
                 }
 
-                // ✅ USE YOUR EXISTING, CORRECT UTIL
-                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(
-                    to,
-                    team.CountryCode ?? "91"
-                );
+                // ✅ FIX: Use UK country code (44) for +447 numbers
+                var detectedCountryCode = PhoneNumberUtil.DetectCountryCode(to);
+                var countryCodeToUse = detectedCountryCode ?? team.CountryCode ?? "44"; // UK default
+
+                _logger.LogInformation("🌍 Country code - Detected: {Detected}, Using: {Using}",
+                    detectedCountryCode ?? "none", countryCodeToUse);
+
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, countryCodeToUse);
 
                 _logger.LogInformation("📱 Phone formatting: {Original} → {Formatted}", to, formattedPhone);
+                _logger.LogInformation("🔑 Using Phone ID: {PhoneId}, API v{Version}",
+                    team.WhatsAppPhoneNumberId, team.ApiVersion ?? "19.0");
 
                 var apiVersion = string.IsNullOrEmpty(team.ApiVersion) ? "19.0" : team.ApiVersion;
                 var url = $"https://graph.facebook.com/v{apiVersion}/{team.WhatsAppPhoneNumberId}/messages";
 
-                // ✅ THIS PART IS THE REAL FIX
-                var payload = new
+                // ✅ BUILD PROPER WHATSAPP TEMPLATE STRUCTURE
+                var requestBody = new Dictionary<string, object>
                 {
-                    messaging_product = "whatsapp",
-                    recipient_type = "individual",
-                    to = formattedPhone,
-                    type = "template",
-                    template = new
+                    ["messaging_product"] = "whatsapp",
+                    ["recipient_type"] = "individual",
+                    ["to"] = formattedPhone,
+                    ["type"] = "template",
+                    ["template"] = new Dictionary<string, object>
                     {
-                        name = templateName,
-                        language = new { code = languageCode ?? "en_US" },
-                        components = BuildTemplateComponents(templateParameters)
+                        ["name"] = templateName,
+                        ["language"] = new Dictionary<string, string>
+                        {
+                            ["code"] = languageCode ?? "en_US"
+                        }
                     }
                 };
 
-                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                // Add parameters if they exist
+                if (templateParameters != null && templateParameters.Any())
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
+                    var components = new List<Dictionary<string, object>>
+            {
+                new Dictionary<string, object>
+                {
+                    ["type"] = "body",
+                    ["parameters"] = templateParameters
+                        .OrderBy(p => p.Key)
+                        .Select(p => new Dictionary<string, object>
+                        {
+                            ["type"] = "text",
+                            ["text"] = p.Value
+                        })
+                        .ToList()
+                }
+            };
+
+                    ((Dictionary<string, object>)requestBody["template"])["components"] = components;
+                }
+
+                var json = JsonSerializer.Serialize(requestBody);
+                _logger.LogInformation("📤 WhatsApp API Payload: {Json}", json);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Authorization =
-                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
-                _logger.LogInformation("📥 WhatsApp Status: {Status}", response.StatusCode);
-                _logger.LogDebug("📥 WhatsApp Body: {Body}", responseContent);
+                _logger.LogInformation("📥 WhatsApp Response Status: {StatusCode}", response.StatusCode);
+                _logger.LogInformation("📥 WhatsApp Response Body: {Response}", responseContent);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ Template delivered to WhatsApp");
+                    _logger.LogInformation("✅ Template '{Template}' sent to {Phone}", templateName, formattedPhone);
                     return true;
                 }
 
-                _logger.LogError("❌ WhatsApp API error: {Status} | {Body}",
+                _logger.LogError("❌ WhatsApp API Error: {StatusCode} - {Response}",
                     response.StatusCode, responseContent);
 
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ SendTemplateMessageAsync crashed");
+                _logger.LogError(ex, "❌ SendTemplateMessageAsync crashed for template {Template}", templateName);
                 return false;
             }
-        }
-
-        private List<object> BuildTemplateComponents(Dictionary<string, string> parameters)
-        {
-            var components = new List<object>();
-
-            if (parameters != null && parameters.Any())
-            {
-                var bodyParameters = parameters
-                    .OrderBy(p => p.Key)
-                    .Select(p => new
-                    {
-                        type = "text",
-                        text = p.Value
-                    })
-                    .ToList();
-
-                components.Add(new
-                {
-                    type = "body",
-                    parameters = bodyParameters
-                });
-            }
-
-            return components;
         }
 
         public async Task<bool> SendWhatsAppTextMessageAsync(string to, string text, int teamId, bool isTemplate = false)
