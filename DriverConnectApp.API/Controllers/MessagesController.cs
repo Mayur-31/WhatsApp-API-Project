@@ -180,7 +180,6 @@ namespace DriverConnectApp.API.Controllers
 
             return dto;
         }
-
         private async Task<IActionResult> HandleIndividualMessage(
     MessageRequest request,
     ApplicationUser? currentUser,
