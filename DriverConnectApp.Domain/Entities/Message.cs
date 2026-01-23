@@ -40,8 +40,7 @@ namespace DriverConnectApp.Domain.Entities
         public string? Priority { get; set; }
 
         // WhatsApp identifiers
-        [Required]
-        public string WhatsAppMessageId { get; set; } = string.Empty;
+        public string? WhatsAppMessageId { get; set; }
 
         // Thread relationship
         public int? ThreadId { get; set; }
@@ -61,7 +60,7 @@ namespace DriverConnectApp.Domain.Entities
 
         [ForeignKey("ReplyToMessageId")]
         public virtual Message? ReplyToMessage { get; set; }
-        public string? LocalMessageId { get; set; }
+        
         public string? ReplyToMessageContent { get; set; }
         public string? ReplyToSenderName { get; set; }
 

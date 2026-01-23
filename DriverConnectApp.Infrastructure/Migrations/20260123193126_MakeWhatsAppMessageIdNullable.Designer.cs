@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DriverConnectApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260123153210_AddLocalMessageIdToMessages")]
-    partial class AddLocalMessageIdToMessages
+    [Migration("20260123193126_MakeWhatsAppMessageIdNullable")]
+    partial class MakeWhatsAppMessageIdNullable
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -358,9 +358,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.Property<string>("JobId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("LocalMessageId")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Location")
                         .HasColumnType("TEXT");
 
@@ -421,7 +418,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("WhatsAppMessageId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");

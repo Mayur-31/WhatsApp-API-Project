@@ -538,7 +538,7 @@ namespace DriverConnectApp.API.Services
             }
         }
 
-        public async Task<bool> SendTemplateMessageAsync(
+        public async Task<string?> SendTemplateMessageAsync(
     string to,
     string templateName,
     Dictionary<string, string> templateParameters,
@@ -555,14 +555,14 @@ namespace DriverConnectApp.API.Services
                 if (team == null)
                 {
                     _logger.LogError("❌ Team {TeamId} not found", teamId);
-                    return false;
+                    return null;
                 }
 
                 if (string.IsNullOrEmpty(team.WhatsAppPhoneNumberId) ||
                     string.IsNullOrEmpty(team.WhatsAppAccessToken))
                 {
                     _logger.LogError("❌ Team {TeamId} WhatsApp config missing", teamId);
-                    return false;
+                    return null;
                 }
 
                 // ✅ FIX: Use UK country code (44) for +447 numbers
@@ -635,19 +635,27 @@ namespace DriverConnectApp.API.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ Template '{Template}' sent to {Phone}", templateName, formattedPhone);
-                    return true;
+                    // ✅ EXTRACT AND RETURN THE REAL WHATSAPP ID
+                    using var jsonDoc = JsonDocument.Parse(responseContent);
+                    if (jsonDoc.RootElement.TryGetProperty("messages", out var messagesArray) &&
+                        messagesArray.GetArrayLength() > 0 &&
+                        messagesArray[0].TryGetProperty("id", out var idElement))
+                    {
+                        var messageId = idElement.GetString();
+                        _logger.LogInformation("✅ Template '{Template}' sent to {Phone}, Message ID: {MessageId}",
+                            templateName, formattedPhone, messageId);
+                        return messageId; // ✅ This is the REAL WhatsApp ID
+                    }
                 }
 
                 _logger.LogError("❌ WhatsApp API Error: {StatusCode} - {Response}",
                     response.StatusCode, responseContent);
-
-                return false;
+                return null;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ SendTemplateMessageAsync crashed for template {Template}", templateName);
-                return false;
+                return null;
             }
         }
 

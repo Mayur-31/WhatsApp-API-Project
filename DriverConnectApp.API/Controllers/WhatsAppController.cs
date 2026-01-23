@@ -203,7 +203,6 @@ namespace DriverConnectApp.API.Controllers
                 _logger.LogInformation("🎯 Sending template message for team {TeamId}: {TemplateName} to {PhoneNumber}",
                     teamId, request.TemplateName, request.PhoneNumber);
 
-
                 var currentUser = await _userManager.GetUserAsync(User);
                 var isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
 
@@ -236,8 +235,8 @@ namespace DriverConnectApp.API.Controllers
                     });
                 }
 
-                // Send template message using the service
-                var success = await _whatsAppService.SendTemplateMessageAsync(
+                // Send template message using the service - NOW RETURNS string?
+                var whatsAppMessageId = await _whatsAppService.SendTemplateMessageAsync(
                     request.PhoneNumber,
                     request.TemplateName,
                     request.TemplateParameters ?? new Dictionary<string, string>(),
@@ -245,7 +244,8 @@ namespace DriverConnectApp.API.Controllers
                     request.LanguageCode
                 );
 
-                if (success)
+                // Check if we got a valid WhatsApp message ID
+                if (!string.IsNullOrEmpty(whatsAppMessageId))
                 {
                     // Find or create driver
                     var driver = await _context.Drivers.FirstOrDefaultAsync(d =>
@@ -295,7 +295,7 @@ namespace DriverConnectApp.API.Controllers
                         MessageType = MessageType.Text,
                         IsFromDriver = false,
                         SentAt = DateTime.UtcNow,
-                        WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
+                        WhatsAppMessageId = whatsAppMessageId, // Use the real WhatsApp ID
                         SenderName = currentUserName,
                         SentByUserId = currentUser?.Id,
                         SentByUserName = currentUserName,
@@ -319,6 +319,7 @@ namespace DriverConnectApp.API.Controllers
                         driverId = driver.Id,
                         conversationId = conversation.Id,
                         messageId = message.Id,
+                        whatsAppMessageId = whatsAppMessageId,
                         teamId = teamId
                     });
                 }

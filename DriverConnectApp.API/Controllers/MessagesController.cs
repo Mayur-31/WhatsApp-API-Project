@@ -453,7 +453,7 @@ namespace DriverConnectApp.API.Controllers
                         request.LanguageCode ?? "en_US"
                     );
 
-                    if (!templateSuccess)
+                    if (string.IsNullOrEmpty(templateSuccess))
                     {
                         // ❌ WhatsApp failed - update message status
                         message.Status = MessageStatus.Failed;
@@ -1646,8 +1646,8 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserName = currentUser?.FullName ?? currentUser?.UserName ?? "Staff";
                 var currentUserId = currentUser?.Id;
 
-                // ✅ CORRECT: Send template via WhatsApp API
-                var success = await _whatsAppService.SendTemplateMessageAsync(
+                // ✅ Send template via WhatsApp API and get the message ID
+                var whatsAppMessageId = await _whatsAppService.SendTemplateMessageAsync(
                     driver.PhoneNumber,
                     request.TemplateName,
                     request.TemplateParameters ?? new Dictionary<string, string>(),
@@ -1655,19 +1655,15 @@ namespace DriverConnectApp.API.Controllers
                     request.LanguageCode
                 );
 
-                if (!success)
+                if (string.IsNullOrEmpty(whatsAppMessageId))
                 {
                     return StatusCode(500, new { message = "Failed to send template message via WhatsApp API" });
                 }
 
-                // ✅ CORRECT: Generate a LOCAL tracking ID (NOT pretending to be WhatsApp ID)
-                var localMessageId = $"local_template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
-
-                // ✅ CORRECT: Store ONLY template metadata
+                // ✅ Create message with WhatsApp ID
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
-                    // ✅ Store accurate description, NOT guessed WhatsApp content
                     Content = $"📋 Template: {request.TemplateName}",
                     MessageType = MessageType.Template,
                     IsFromDriver = false,
@@ -1675,10 +1671,7 @@ namespace DriverConnectApp.API.Controllers
                     SenderPhoneNumber = "System",
                     SenderName = currentUserName,
                     SentAt = DateTime.UtcNow,
-                    // ✅ CRITICAL: Store NULL for WhatsAppMessageId (will be updated by webhook)
-                    WhatsAppMessageId = null,
-                    // ✅ Store local tracking ID separately
-                    LocalMessageId = localMessageId,
+                    WhatsAppMessageId = whatsAppMessageId,
                     SentByUserId = currentUserId,
                     SentByUserName = currentUserName,
                     IsTemplateMessage = true,
@@ -1686,7 +1679,7 @@ namespace DriverConnectApp.API.Controllers
                     TemplateParametersJson = request.TemplateParameters != null
                         ? JsonSerializer.Serialize(request.TemplateParameters)
                         : null,
-                    Status = MessageStatus.Pending // Set to Pending until webhook confirms
+                    Status = MessageStatus.Sent
                 };
 
                 _context.Messages.Add(message);
@@ -1701,7 +1694,7 @@ namespace DriverConnectApp.API.Controllers
                     messageId = message.Id,
                     conversationId = conversation.Id,
                     isTemplate = true,
-                    localMessageId = localMessageId,
+                    whatsAppMessageId = message.WhatsAppMessageId,
                     displayContent = message.Content,
                     templateName = request.TemplateName,
                     templateParameters = request.TemplateParameters

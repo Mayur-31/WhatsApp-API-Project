@@ -21,7 +21,7 @@ namespace DriverConnectApp.API.Services
         Task<Team> CreateTeamAsync(CreateTeamRequest request);
         Task<Team> UpdateTeamAsync(int teamId, UpdateTeamRequest request);
 
-        Task<bool> SendTemplateMessageAsync(string to, string templateName,
+        Task<string?> SendTemplateMessageAsync(string to, string templateName,
             Dictionary<string, string> templateParameters, int teamId, string? languageCode = "en_US");
 
         // ✅ ADDED: Group message method
