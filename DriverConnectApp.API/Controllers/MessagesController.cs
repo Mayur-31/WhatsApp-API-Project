@@ -300,23 +300,51 @@ namespace DriverConnectApp.API.Controllers
 
             // ✅ FIXED: Create proper message content for template messages
             string messageContent;
-            MessageType messageTypeEnum; // ✅ Changed variable name to avoid conflict
+            MessageType messageTypeEnum;
 
             if (request.IsTemplateMessage)
             {
-                // For templates, the content should be the actual template message
-                messageContent = !string.IsNullOrEmpty(request.Content)
-                    ? request.Content
-                    : $"Template: {request.TemplateName}";
-
-                // Add parameters if available
+                // ✅ Generate actual template message based on parameters
                 if (request.TemplateParameters != null && request.TemplateParameters.Any())
                 {
-                    var paramsText = string.Join(", ", request.TemplateParameters.Select(kv => $"{kv.Key}: {kv.Value}"));
-                    if (!messageContent.Contains(paramsText))
+                    // Get parameter values in order
+                    var paramValues = request.TemplateParameters
+                        .OrderBy(p => p.Key)
+                        .Select(p => p.Value)
+                        .ToList();
+
+                    // Customize based on your actual templates
+                    if (request.TemplateName == "hello_world" && paramValues.Count >= 1)
                     {
-                        messageContent += $" ({paramsText})";
+                        messageContent = $"Hello {paramValues[0]}, welcome to our service!";
                     }
+                    else if (request.TemplateName == "welcome_message" && paramValues.Count >= 2)
+                    {
+                        messageContent = $"Welcome {paramValues[0]} to {paramValues[1]}!";
+                    }
+                    else if (request.TemplateName == "booking_confirmation" && paramValues.Count >= 3)
+                    {
+                        messageContent = $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.";
+                    }
+                    else if (request.TemplateName == "payment_reminder" && paramValues.Count >= 3)
+                    {
+                        messageContent = $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.";
+                    }
+                    else if (request.TemplateName == "order_shipped" && paramValues.Count >= 2)
+                    {
+                        messageContent = $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}";
+                    }
+                    else
+                    {
+                        // Generic fallback - show parameters
+                        var paramsText = string.Join(", ", paramValues);
+                        messageContent = $"{request.TemplateName}: {paramsText}";
+                    }
+                }
+                else
+                {
+                    // No parameters, just show template name
+                    messageContent = $"Template: {request.TemplateName}";
                 }
 
                 // Template messages should have Template type
@@ -1321,6 +1349,37 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+        private string GenerateTemplateContent(string templateName, Dictionary<string, string> parameters)
+        {
+            if (parameters == null || !parameters.Any())
+                return $"Template: {templateName}";
+
+            // Get parameter values in order
+            var paramValues = parameters
+                .OrderBy(p => p.Key)
+                .Select(p => p.Value)
+                .ToList();
+
+            // Map template names to actual content
+            return templateName.ToLower() switch
+            {
+                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
+                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
+                "booking_confirmation" when paramValues.Count >= 3 => $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.",
+                "payment_reminder" when paramValues.Count >= 3 => $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.",
+                "order_shipped" when paramValues.Count >= 2 => $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}",
+                "delivery_update" when paramValues.Count >= 2 => $"Your delivery #{paramValues[0]} is on the way. ETA: {paramValues[1]}",
+                "appointment_reminder" when paramValues.Count >= 3 => $"Reminder: Your appointment with {paramValues[0]} is on {paramValues[1]} at {paramValues[2]}.",
+                "service_completed" when paramValues.Count >= 2 => $"Service #{paramValues[0]} has been completed. {paramValues[1]}",
+                "invoice_sent" when paramValues.Count >= 3 => $"Invoice #{paramValues[0]} for {paramValues[1]} has been sent. Amount: {paramValues[2]}",
+                "feedback_request" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, we'd love your feedback on our service!",
+
+                // Add more templates as needed
+
+                _ => $"{templateName}: {string.Join(", ", paramValues)}"
+            };
+        }
+
         private async Task<CompressionResult> CompressImageAsync(IFormFile file, string outputPath, long targetSize)
         {
             using var inputStream = file.OpenReadStream();
@@ -1530,7 +1589,7 @@ namespace DriverConnectApp.API.Controllers
         {
             try
             {
-                _logger.LogInformation("Sending template message to driver {DriverId} with template {TemplateName}",
+                _logger.LogInformation("🚀 Sending template message to driver {DriverId} with template {TemplateName}",
                     request.DriverId, request.TemplateName);
 
                 if (request == null || string.IsNullOrEmpty(request.TemplateName))
@@ -1540,7 +1599,6 @@ namespace DriverConnectApp.API.Controllers
                 if (driver == null)
                     return NotFound(new { message = "Driver not found" });
 
-                // Check if driver has a team assigned
                 if (!driver.TeamId.HasValue)
                 {
                     return BadRequest(new { message = "Driver is not assigned to a team. Cannot send template message." });
@@ -1569,68 +1627,74 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserName = currentUser?.FullName ?? currentUser?.UserName ?? "Staff";
                 var currentUserId = currentUser?.Id;
 
-                // Send template message - Use driver.TeamId.Value since we've checked it's not null
+                // ✅ GENERATE ACTUAL TEMPLATE CONTENT BEFORE SENDING
+                string actualMessageContent = GenerateTemplateContent(request.TemplateName, request.TemplateParameters);
+                _logger.LogInformation("📝 Generated template content: {Content}", actualMessageContent);
+
+                // Send template message
                 var success = await _whatsAppService.SendTemplateMessageAsync(
                     driver.PhoneNumber,
                     request.TemplateName,
                     request.TemplateParameters ?? new Dictionary<string, string>(),
-                    driver.TeamId.Value, // This is the fix - use .Value to get the non-nullable int
+                    driver.TeamId.Value,
                     request.LanguageCode
                 );
 
-                if (success)
-                {
-                    // Save message to database
-                    var message = new Message
-                    {
-                        ConversationId = conversation.Id,
-                        Content = $"Template: {request.TemplateName}",
-                        MessageType = MessageType.Text,
-                        IsFromDriver = false,
-                        IsGroupMessage = false,
-                        SenderPhoneNumber = "System",
-                        SenderName = currentUserName,
-                        SentAt = DateTime.UtcNow,
-                        WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
-                        SentByUserId = currentUserId,
-                        SentByUserName = currentUserName,
-                        IsTemplateMessage = true,
-                        TemplateName = request.TemplateName,
-                        TemplateParametersJson = request.TemplateParameters != null
-                            ? JsonSerializer.Serialize(request.TemplateParameters)
-                            : null
-                    };
-
-                    _context.Messages.Add(message);
-                    conversation.LastMessageAt = message.SentAt;
-                    await _context.SaveChangesAsync();
-
-                    _logger.LogInformation("Template message sent successfully to driver {DriverId}", driver.Id);
-
-                    return Ok(new
-                    {
-                        message = "Template message sent successfully",
-                        messageId = message.Id,
-                        conversationId = conversation.Id,
-                        isTemplate = true
-                    });
-                }
-                else
+                if (!success)
                 {
                     return StatusCode(500, new { message = "Failed to send template message via WhatsApp API" });
                 }
+
+                // ✅ SAVE MESSAGE WITH ACTUAL CONTENT
+                var message = new Message
+                {
+                    ConversationId = conversation.Id,
+                    Content = actualMessageContent, // ✅ Use actual content, not "Template: hello_world"
+                    MessageType = MessageType.Template, // ✅ Use Template type
+                    IsFromDriver = false,
+                    IsGroupMessage = false,
+                    SenderPhoneNumber = "System",
+                    SenderName = currentUserName,
+                    SentAt = DateTime.UtcNow,
+                    WhatsAppMessageId = $"template_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}",
+                    SentByUserId = currentUserId,
+                    SentByUserName = currentUserName,
+                    IsTemplateMessage = true,
+                    TemplateName = request.TemplateName,
+                    TemplateParametersJson = request.TemplateParameters != null
+                        ? JsonSerializer.Serialize(request.TemplateParameters)
+                        : null,
+                    Status = MessageStatus.Sent
+                };
+
+                _context.Messages.Add(message);
+                conversation.LastMessageAt = message.SentAt;
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("✅ Template message sent successfully to driver {DriverId}: {Content}",
+                    driver.Id, message.Content);
+
+                return Ok(new
+                {
+                    message = "Template message sent successfully",
+                    messageId = message.Id,
+                    conversationId = conversation.Id,
+                    isTemplate = true,
+                    actualContent = message.Content
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending template message");
+                _logger.LogError(ex, "❌ Error sending template message");
                 return StatusCode(500, new { message = "Failed to send template message", error = ex.Message });
             }
         }
     }
 
 
-
     
+
+
 
     public class CompressionResult
     {

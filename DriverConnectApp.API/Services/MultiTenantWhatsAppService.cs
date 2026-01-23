@@ -547,6 +547,8 @@ namespace DriverConnectApp.API.Services
         {
             try
             {
+                string displayContent = GenerateTemplateDisplayContent(templateName, templateParameters);
+                _logger.LogInformation("📝 Template Display Content: {Content}", displayContent);
                 _logger.LogInformation("🎯 Sending template: {Template} to {To}", templateName, to);
 
                 var team = await GetTeamById(teamId);
@@ -1652,6 +1654,26 @@ namespace DriverConnectApp.API.Services
             }
 
             return (content, type, mediaUrl, fileName, fileSize, mimeType, location, contactName, contactPhone);
+        }
+
+        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
+        {
+            if (parameters == null || !parameters.Any())
+                return $"Template: {templateName}";
+
+            var paramValues = parameters
+                .OrderBy(p => p.Key)
+                .Select(p => p.Value)
+                .ToList();
+
+            // This should match the same logic as in MessagesController
+            return templateName.ToLower() switch
+            {
+                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
+                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
+                // Add other templates as needed
+                _ => $"{templateName}: {string.Join(", ", paramValues)}"
+            };
         }
 
         // ✅ ADDED: Missing interface method implementation
