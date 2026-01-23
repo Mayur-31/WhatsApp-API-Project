@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using DriverConnectApp.API.Services;
+using System.Net.Http.Headers;
 
 namespace DriverConnectApp.API.Services
 {
@@ -546,8 +547,7 @@ namespace DriverConnectApp.API.Services
         {
             try
             {
-                _logger.LogInformation("🎯 Sending template message: {TemplateName} to {To} for team {TeamId}",
-                    templateName, to, teamId);
+                _logger.LogInformation("🎯 Sending template: {Template} to {To}", templateName, to);
 
                 var team = await GetTeamById(teamId);
                 if (team == null)
@@ -559,91 +559,93 @@ namespace DriverConnectApp.API.Services
                 if (string.IsNullOrEmpty(team.WhatsAppPhoneNumberId) ||
                     string.IsNullOrEmpty(team.WhatsAppAccessToken))
                 {
-                    _logger.LogError("❌ Team {TeamId} is missing WhatsApp configuration", teamId);
+                    _logger.LogError("❌ Team {TeamId} WhatsApp config missing", teamId);
                     return false;
                 }
 
-                // ✅ FIX: Detect country code from the phone number first, then use team's country code
-                var detectedCountryCode = PhoneNumberUtil.DetectCountryCode(to);
-                var countryCodeToUse = detectedCountryCode ?? team.CountryCode ?? "91";
+                // ✅ USE YOUR EXISTING, CORRECT UTIL
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(
+                    to,
+                    team.CountryCode ?? "91"
+                );
 
-                _logger.LogInformation(
-                    "🌍 Template Message - Country Code: Detected={Detected}, Team={Team}, Using={Using}",
-                    detectedCountryCode ?? "none",
-                    team.CountryCode ?? "none",
-                    countryCodeToUse);
+                _logger.LogInformation("📱 Phone formatting: {Original} → {Formatted}", to, formattedPhone);
 
-                // Normalize phone number for WhatsApp API
-                var formattedPhoneNumber = PhoneNumberUtil.FormatForWhatsAppApi(to, countryCodeToUse);
-
-                _logger.LogInformation(
-                    "📞 Template - Original: {Original}, Normalized: {Normalized}",
-                    to, formattedPhoneNumber);
-
-                var apiVersion = string.IsNullOrEmpty(team.ApiVersion) ? "18.0" : team.ApiVersion;
+                var apiVersion = string.IsNullOrEmpty(team.ApiVersion) ? "19.0" : team.ApiVersion;
                 var url = $"https://graph.facebook.com/v{apiVersion}/{team.WhatsAppPhoneNumberId}/messages";
 
-                var requestBody = new Dictionary<string, object>
+                // ✅ THIS PART IS THE REAL FIX
+                var payload = new
                 {
-                    ["messaging_product"] = "whatsapp",
-                    ["recipient_type"] = "individual",
-                    ["to"] = formattedPhoneNumber,
-                    ["type"] = "template",
-                    ["template"] = new Dictionary<string, object>
+                    messaging_product = "whatsapp",
+                    recipient_type = "individual",
+                    to = formattedPhone,
+                    type = "template",
+                    template = new
                     {
-                        ["name"] = templateName,
-                        ["language"] = new Dictionary<string, string>
-                        {
-                            ["code"] = languageCode ?? "en_US"
-                        }
+                        name = templateName,
+                        language = new { code = languageCode ?? "en_US" },
+                        components = BuildTemplateComponents(templateParameters)
                     }
                 };
 
-                if (templateParameters != null && templateParameters.Any())
+                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
                 {
-                    var components = new List<Dictionary<string, object>>
-            {
-                new Dictionary<string, object>
-                {
-                    ["type"] = "body",
-                    ["parameters"] = templateParameters.Select(kv => new Dictionary<string, string>
-                    {
-                        ["type"] = "text",
-                        ["text"] = kv.Value
-                    }).ToArray()
-                }
-            };
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
 
-                    ((Dictionary<string, object>)requestBody["template"])["components"] = components;
-                }
+                using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Authorization =
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var json = JsonSerializer.Serialize(requestBody);
-                _logger.LogInformation("📤 Sending to WhatsApp API: {Json}", json);
-
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                _httpClient.DefaultRequestHeaders.Remove("Authorization");
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {team.WhatsAppAccessToken}");
-
-                var response = await _httpClient.PostAsync(url, content);
+                var response = await _httpClient.SendAsync(request);
                 var responseContent = await response.Content.ReadAsStringAsync();
+
+                _logger.LogInformation("📥 WhatsApp Status: {Status}", response.StatusCode);
+                _logger.LogDebug("📥 WhatsApp Body: {Body}", responseContent);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ Template message sent successfully to {To}", formattedPhoneNumber);
+                    _logger.LogInformation("✅ Template delivered to WhatsApp");
                     return true;
                 }
-                else
-                {
-                    _logger.LogError("❌ Failed to send template. Status: {Status}, Response: {Response}",
-                        response.StatusCode, responseContent);
-                    return false;
-                }
+
+                _logger.LogError("❌ WhatsApp API error: {Status} | {Body}",
+                    response.StatusCode, responseContent);
+
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error sending template message");
+                _logger.LogError(ex, "❌ SendTemplateMessageAsync crashed");
                 return false;
             }
+        }
+
+        private List<object> BuildTemplateComponents(Dictionary<string, string> parameters)
+        {
+            var components = new List<object>();
+
+            if (parameters != null && parameters.Any())
+            {
+                var bodyParameters = parameters
+                    .OrderBy(p => p.Key)
+                    .Select(p => new
+                    {
+                        type = "text",
+                        text = p.Value
+                    })
+                    .ToList();
+
+                components.Add(new
+                {
+                    type = "body",
+                    parameters = bodyParameters
+                });
+            }
+
+            return components;
         }
 
         public async Task<bool> SendWhatsAppTextMessageAsync(string to, string text, int teamId, bool isTemplate = false)

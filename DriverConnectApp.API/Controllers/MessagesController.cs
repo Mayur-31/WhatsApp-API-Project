@@ -1521,6 +1521,7 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+
         // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
         [HttpPost("send-template")]
         public async Task<IActionResult> SendTemplateMessage([FromBody] SendTemplateByDriverIdRequest request)
@@ -1624,6 +1625,10 @@ namespace DriverConnectApp.API.Controllers
             }
         }
     }
+
+
+
+    
 
     public class CompressionResult
     {
