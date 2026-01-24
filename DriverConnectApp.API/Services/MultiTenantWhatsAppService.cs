@@ -678,14 +678,32 @@ namespace DriverConnectApp.API.Services
                     return true;
                 }
 
+                // ✅ FIX: Use EXISTING PhoneNumberUtil but with proper team country code
+                string formattedPhone;
+
+                // First, check if the number is already in proper WhatsApp format
+                if (to.Contains("@c.us"))
+                {
+                    // Already a WhatsApp ID, extract phone
+                    formattedPhone = PhoneNumberUtil.ExtractPhoneFromWhatsAppId(to);
+                }
+                else
+                {
+                    // Format using team's country code (default to India: 91)
+                    formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "91");
+                }
+
+                _logger.LogInformation("📤 Sending WhatsApp text: Original={Original}, Formatted={Formatted}, Team={TeamName}",
+                    to, formattedPhone, team.Name);
+
+                // ✅ KEEP your existing API call structure - don't change the request format
                 var url = $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/messages";
-                var formattedPhoneNumber = new string(to.Where(char.IsDigit).ToArray());
 
                 var requestBody = new
                 {
                     messaging_product = "whatsapp",
                     recipient_type = "individual",
-                    to = formattedPhoneNumber,
+                    to = formattedPhone,  // Use formatted number
                     type = "text",
                     text = new { body = text }
                 };
@@ -698,24 +716,47 @@ namespace DriverConnectApp.API.Services
                 var response = await _httpClient.PostAsync(url, content);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
+                _logger.LogInformation("📥 WhatsApp Response: Status={StatusCode}, Body={Response}",
+                    response.StatusCode, responseContent.Length > 200 ? responseContent.Substring(0, 200) + "..." : responseContent);
+
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ WhatsApp text message sent to {To} for team {TeamName}",
-                        to, team.Name);
+                    _logger.LogInformation("✅ WhatsApp text message sent to {Phone}", to);
                     return true;
                 }
-                else
-                {
-                    _logger.LogError("❌ Failed to send WhatsApp text message: Status={Status}, Error={Error}",
-                        response.StatusCode, responseContent);
-                    return false;
-                }
+
+                _logger.LogError("❌ Failed to send WhatsApp text: {Error}", responseContent);
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending WhatsApp text message to {To}", to);
+                _logger.LogError(ex, "❌ Error sending WhatsApp text to {To}", to);
                 return false;
             }
+        }
+
+        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
+        {
+            if (parameters == null || !parameters.Any())
+                return $"Template: {templateName}";
+
+            // Order parameters consistently
+            var paramValues = parameters
+                .OrderBy(p => p.Key)
+                .Select(p => p.Value)
+                .ToList();
+
+            // Simple preview based on your actual templates
+            // This matches what you'll see in WhatsApp
+            return templateName.ToLower() switch
+            {
+                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}! 👋",
+                "order_confirmation" when paramValues.Count >= 3 => $"✅ Order #{paramValues[0]} confirmed for {paramValues[1]}. Delivery: {paramValues[2]}",
+                "delivery_update" when paramValues.Count >= 2 => $"🚚 Delivery #{paramValues[0]} - ETA: {paramValues[1]}",
+                "welcome_message" when paramValues.Count >= 2 => $"🎉 Welcome {paramValues[0]} to {paramValues[1]}!",
+                "payment_reminder" when paramValues.Count >= 3 => $"💰 Invoice #{paramValues[0]} - Amount: {paramValues[1]}, Due: {paramValues[2]}",
+                _ => $"{templateName}: {string.Join(", ", paramValues)}"
+            };
         }
 
         public async Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
@@ -1664,25 +1705,7 @@ namespace DriverConnectApp.API.Services
             return (content, type, mediaUrl, fileName, fileSize, mimeType, location, contactName, contactPhone);
         }
 
-        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
-        {
-            if (parameters == null || !parameters.Any())
-                return $"Template: {templateName}";
-
-            var paramValues = parameters
-                .OrderBy(p => p.Key)
-                .Select(p => p.Value)
-                .ToList();
-
-            // This should match the same logic as in MessagesController
-            return templateName.ToLower() switch
-            {
-                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
-                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
-                // Add other templates as needed
-                _ => $"{templateName}: {string.Join(", ", paramValues)}"
-            };
-        }
+        
 
         // ✅ ADDED: Missing interface method implementation
         public Task SendWhatsAppMessageAsync(string phoneNumber, string message, bool isTemplate, MessageContext? context, int teamId)

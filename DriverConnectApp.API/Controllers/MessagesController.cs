@@ -305,49 +305,7 @@ namespace DriverConnectApp.API.Controllers
             if (request.IsTemplateMessage)
             {
                 // ✅ Generate actual template message based on parameters
-                if (request.TemplateParameters != null && request.TemplateParameters.Any())
-                {
-                    // Get parameter values in order
-                    var paramValues = request.TemplateParameters
-                        .OrderBy(p => p.Key)
-                        .Select(p => p.Value)
-                        .ToList();
-
-                    // Customize based on your actual templates
-                    if (request.TemplateName == "hello_world" && paramValues.Count >= 1)
-                    {
-                        messageContent = $"Hello {paramValues[0]}, welcome to our service!";
-                    }
-                    else if (request.TemplateName == "welcome_message" && paramValues.Count >= 2)
-                    {
-                        messageContent = $"Welcome {paramValues[0]} to {paramValues[1]}!";
-                    }
-                    else if (request.TemplateName == "booking_confirmation" && paramValues.Count >= 3)
-                    {
-                        messageContent = $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.";
-                    }
-                    else if (request.TemplateName == "payment_reminder" && paramValues.Count >= 3)
-                    {
-                        messageContent = $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.";
-                    }
-                    else if (request.TemplateName == "order_shipped" && paramValues.Count >= 2)
-                    {
-                        messageContent = $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}";
-                    }
-                    else
-                    {
-                        // Generic fallback - show parameters
-                        var paramsText = string.Join(", ", paramValues);
-                        messageContent = $"{request.TemplateName}: {paramsText}";
-                    }
-                }
-                else
-                {
-                    // No parameters, just show template name
-                    messageContent = $"Template: {request.TemplateName}";
-                }
-
-                // Template messages should have Template type
+                messageContent = GenerateTemplateDisplayContent(request.TemplateName, request.TemplateParameters);
                 messageTypeEnum = MessageType.Template;
             }
             else
@@ -1349,33 +1307,25 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
-        private string GenerateTemplateContent(string templateName, Dictionary<string, string> parameters)
+        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string>? parameters)
         {
             if (parameters == null || !parameters.Any())
-                return $"Template: {templateName}";
+                return $"📋 Template: {templateName}";
 
-            // Get parameter values in order
+            // Order parameters consistently
             var paramValues = parameters
                 .OrderBy(p => p.Key)
                 .Select(p => p.Value)
                 .ToList();
 
-            // Map template names to actual content
+            // Simple preview based on your actual templates
             return templateName.ToLower() switch
             {
-                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
-                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
-                "booking_confirmation" when paramValues.Count >= 3 => $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.",
-                "payment_reminder" when paramValues.Count >= 3 => $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.",
-                "order_shipped" when paramValues.Count >= 2 => $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}",
-                "delivery_update" when paramValues.Count >= 2 => $"Your delivery #{paramValues[0]} is on the way. ETA: {paramValues[1]}",
-                "appointment_reminder" when paramValues.Count >= 3 => $"Reminder: Your appointment with {paramValues[0]} is on {paramValues[1]} at {paramValues[2]}.",
-                "service_completed" when paramValues.Count >= 2 => $"Service #{paramValues[0]} has been completed. {paramValues[1]}",
-                "invoice_sent" when paramValues.Count >= 3 => $"Invoice #{paramValues[0]} for {paramValues[1]} has been sent. Amount: {paramValues[2]}",
-                "feedback_request" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, we'd love your feedback on our service!",
-
-                // Add more templates as needed
-
+                "hello_world" when paramValues.Count >= 1 => $"👋 Hello {paramValues[0]}! Welcome to our service.",
+                "order_confirmation" when paramValues.Count >= 3 => $"✅ Order #{paramValues[0]} confirmed for {paramValues[1]}. Delivery: {paramValues[2]}",
+                "delivery_update" when paramValues.Count >= 2 => $"🚚 Delivery #{paramValues[0]} - ETA: {paramValues[1]}",
+                "welcome_message" when paramValues.Count >= 2 => $"🎉 Welcome {paramValues[0]} to {paramValues[1]}!",
+                "payment_reminder" when paramValues.Count >= 3 => $"💰 Invoice #{paramValues[0]} - Amount: {paramValues[1]}, Due: {paramValues[2]}",
                 _ => $"{templateName}: {string.Join(", ", paramValues)}"
             };
         }
@@ -1664,7 +1614,7 @@ namespace DriverConnectApp.API.Controllers
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
-                    Content = $"📋 Template: {request.TemplateName}",
+                    Content = GenerateTemplateDisplayContent(request.TemplateName, request.TemplateParameters),
                     MessageType = MessageType.Template,
                     IsFromDriver = false,
                     IsGroupMessage = false,
