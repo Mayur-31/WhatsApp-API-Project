@@ -60,7 +60,7 @@ namespace DriverConnectApp.Domain.Entities
 
         [ForeignKey("ReplyToMessageId")]
         public virtual Message? ReplyToMessage { get; set; }
-        
+
         public string? ReplyToMessageContent { get; set; }
         public string? ReplyToSenderName { get; set; }
 
