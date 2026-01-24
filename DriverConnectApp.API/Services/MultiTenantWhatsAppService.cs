@@ -49,98 +49,150 @@ namespace DriverConnectApp.API.Services
 
         public async Task<object> SendMessageAsync(SendMessageRequest request, int teamId)
         {
-            if (request == null)
-            {
-                _logger.LogError("Invalid send message request for team {TeamId}", teamId);
-                throw new ArgumentNullException(nameof(request));
-            }
+            if (request == null) throw new ArgumentNullException(nameof(request));
 
             _logger.LogInformation(
-                "📨 Processing message for team {TeamId}: IsTemplate={IsTemplate}, Content={Content}",
-                teamId, request.IsTemplateMessage, request.Content);
+                "📤 Processing message for team {TeamId}: Type={MessageType}, Content={Content}",
+                teamId, request.MessageType, request.Content?.Substring(0, Math.Min(50, request.Content.Length)));
 
+            // ✅ Get team
             var team = await GetTeamById(teamId);
             if (team == null || !team.IsActive)
-            {
                 throw new InvalidOperationException($"Team {teamId} not found or inactive");
-            }
 
-            // ✅ 24-hour window check for NON-template messages
+            // ✅ Get phone number
+            string phoneNumber = await GetTargetPhoneNumberAsync(request, teamId);
+            if (string.IsNullOrEmpty(phoneNumber))
+                throw new InvalidOperationException("Could not determine phone number");
+
+            // ✅ For non-template messages: Check 24-hour window
             if (!request.IsTemplateMessage && !request.IsGroupMessage && request.ConversationId.HasValue)
             {
-                bool canSendFreeText = await CanSendNonTemplateMessage(request.ConversationId.Value);
-
-                if (!canSendFreeText)
+                bool canSend = await CanSendNonTemplateMessage(request.ConversationId.Value);
+                if (!canSend)
                 {
-                    _logger.LogWarning(
-                        "🚫 Cannot send non-template to conversation {ConversationId} - outside 24h window",
-                        request.ConversationId);
-
+                    _logger.LogWarning("🚫 24-hour window expired for conversation {ConversationId}", request.ConversationId);
                     throw new InvalidOperationException(
-                        "TEMPLATE_REQUIRED|Cannot send regular messages outside 24-hour window. " +
-                        "Use a template message instead.");
+                        "TEMPLATE_REQUIRED|Cannot send free messages outside 24-hour window. Use template messages instead.");
                 }
             }
 
-            // Handle group messages
-            if (request.IsGroupMessage && !string.IsNullOrEmpty(request.GroupId))
-            {
-                return await HandleGroupMessage(request, team);
-            }
-
-            // ✅ TEMPLATE MESSAGES: Already handled in MessagesController
-            if (request.IsTemplateMessage)
-            {
-                _logger.LogInformation("✅ Template message already saved by MessagesController");
-                return new
-                {
-                    Status = "TemplateProcessing",
-                    IsTemplate = true,
-                    WhatsAppMessageId = request.WhatsAppMessageId,
-                    Note = "Template will be sent via background task"
-                };
-            }
-
-            // Handle regular (non-template) messages
-            Driver? driver = null;
-            string? phoneNumber = null;
-
-            if (request.DriverId.HasValue)
-            {
-                driver = await _context.Drivers.FindAsync(request.DriverId.Value);
-                phoneNumber = driver?.PhoneNumber;
-            }
-            else if (!string.IsNullOrEmpty(request.PhoneNumber))
-            {
-                phoneNumber = request.PhoneNumber;
-                driver = await _context.Drivers
-                    .FirstOrDefaultAsync(d => d.PhoneNumber == phoneNumber && d.TeamId == teamId);
-            }
-
-            if (string.IsNullOrEmpty(phoneNumber))
-            {
-                throw new InvalidOperationException("Could not determine phone number for message");
-            }
-
-            // ✅ ONLY send via WhatsApp API - NO database operations
+            // ✅ Send via WhatsApp API
             var testMode = _configuration.GetValue<bool>("WhatsApp:TestMode", false);
+            string? whatsAppMessageId = null;
+
             if (!testMode)
             {
-                await SendRegularMessageToWhatsAppApi(request, phoneNumber, team);
+                if (request.IsTemplateMessage)
+                {
+                    // Template messages use separate endpoint
+                    throw new InvalidOperationException("Template messages should use SendTemplateMessageAsync");
+                }
+                else
+                {
+                    // ✅ REGULAR TEXT MESSAGES: Send via WhatsApp API
+                    whatsAppMessageId = await SendWhatsAppTextMessageAndGetIdAsync(
+                        phoneNumber,
+                        request.Content ?? string.Empty,
+                        teamId);
+                }
             }
 
             return new
             {
                 Status = "SentToWhatsApp",
-                IsTemplate = false,
-                WhatsAppMessageId = request.WhatsAppMessageId,
+                WhatsAppMessageId = whatsAppMessageId,
                 PhoneNumber = phoneNumber,
-                Success = true
+                Success = true,
+                Timestamp = DateTime.UtcNow
             };
         }
 
+        private async Task<string> SendWhatsAppTextMessageAndGetIdAsync(string to, string text, int teamId)
+        {
+            try
+            {
+                var team = await GetTeamById(teamId);
+                if (team == null || !team.IsActive)
+                {
+                    _logger.LogError("Team {TeamId} not found or inactive", teamId);
+                    return string.Empty;
+                }
 
+                // ✅ Use PhoneNumberUtil for proper formatting
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "91");
 
+                _logger.LogInformation("📤 Sending WhatsApp text to {FormattedPhone}", formattedPhone);
+
+                var apiVersion = team.ApiVersion ?? "19.0";
+                var url = $"https://graph.facebook.com/v{apiVersion}/{team.WhatsAppPhoneNumberId}/messages";
+
+                var requestBody = new
+                {
+                    messaging_product = "whatsapp",
+                    recipient_type = "individual",
+                    to = formattedPhone,
+                    type = "text",
+                    text = new { body = text }
+                };
+
+                var json = JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                _httpClient.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+
+                var response = await _httpClient.PostAsync(url, content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    // ✅ Extract WhatsApp message ID from response
+                    using var jsonDoc = JsonDocument.Parse(responseContent);
+                    if (jsonDoc.RootElement.TryGetProperty("messages", out var messages) &&
+                        messages.GetArrayLength() > 0 &&
+                        messages[0].TryGetProperty("id", out var idElement))
+                    {
+                        var messageId = idElement.GetString();
+                        _logger.LogInformation("✅ WhatsApp text sent to {Phone}, Message ID: {MessageId}",
+                            formattedPhone, messageId);
+                        return messageId;
+                    }
+                }
+
+                _logger.LogError("❌ WhatsApp API Error: {StatusCode} - {Response}",
+                    response.StatusCode, responseContent);
+                return string.Empty;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error sending WhatsApp text to {To}", to);
+                return string.Empty;
+            }
+        }
+        private async Task<string> GetTargetPhoneNumberAsync(SendMessageRequest request, int teamId)
+        {
+            if (!string.IsNullOrEmpty(request.PhoneNumber))
+                return request.PhoneNumber;
+
+            if (request.DriverId.HasValue)
+            {
+                var driver = await _context.Drivers.FindAsync(request.DriverId.Value);
+                if (driver != null)
+                    return driver.PhoneNumber;
+            }
+
+            if (request.ConversationId.HasValue)
+            {
+                var conversation = await _context.Conversations
+                    .Include(c => c.Driver)
+                    .FirstOrDefaultAsync(c => c.Id == request.ConversationId.Value && c.TeamId == teamId);
+
+                if (conversation?.Driver != null)
+                    return conversation.Driver.PhoneNumber;
+            }
+
+            throw new InvalidOperationException("Could not determine phone number");
+        }
 
         private async Task<object> HandleGroupMessage(SendMessageRequest request, Team team)
         {
