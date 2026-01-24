@@ -183,33 +183,6 @@ const getDriverIdFromConversation = async (): Promise<number> => {
   }
 }
 
-const generateTemplatePreview = (name: string, params: Record<string, string>): string => {
-  const paramValues = Object.values(params)
-  
-  // ✅ CORRECT JavaScript/TypeScript syntax (no 'when' clause)
-  if (name === 'hello_world' && paramValues.length >= 1) {
-    return `Hello ${paramValues[0]}! 👋`
-  } 
-  else if (name === 'order_confirmation' && paramValues.length >= 3) {
-    return `✅ Order #${paramValues[0]} confirmed for ${paramValues[1]}. Delivery: ${paramValues[2]}`
-  }
-  else if (name === 'delivery_update' && paramValues.length >= 2) {
-    return `🚚 Delivery #${paramValues[0]} - ETA: ${paramValues[1]}`
-  }
-  else if (name === 'welcome_message' && paramValues.length >= 2) {
-    return `🎉 Welcome ${paramValues[0]} to ${paramValues[1]}!`
-  }
-  else if (name === 'payment_reminder' && paramValues.length >= 3) {
-    return `💰 Invoice #${paramValues[0]} - Amount: ${paramValues[1]}, Due: ${paramValues[2]}`
-  }
-  else {
-    return `📋 ${name}: ${paramValues.join(', ')}`
-  }
-}
-
-// Update the send() method to use this:
-const templatePreview = generateTemplatePreview(templateName.value, templateParams)
-
 const send = async () => {
   if (!templateName.value || !props.phoneNumber || !props.teamId || !props.conversationId) {
     errorMessage.value = 'Please fill all required fields'

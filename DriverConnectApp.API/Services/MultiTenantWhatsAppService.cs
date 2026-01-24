@@ -735,30 +735,6 @@ namespace DriverConnectApp.API.Services
             }
         }
 
-        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
-        {
-            if (parameters == null || !parameters.Any())
-                return $"Template: {templateName}";
-
-            // Order parameters consistently
-            var paramValues = parameters
-                .OrderBy(p => p.Key)
-                .Select(p => p.Value)
-                .ToList();
-
-            // Simple preview based on your actual templates
-            // This matches what you'll see in WhatsApp
-            return templateName.ToLower() switch
-            {
-                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}! 👋",
-                "order_confirmation" when paramValues.Count >= 3 => $"✅ Order #{paramValues[0]} confirmed for {paramValues[1]}. Delivery: {paramValues[2]}",
-                "delivery_update" when paramValues.Count >= 2 => $"🚚 Delivery #{paramValues[0]} - ETA: {paramValues[1]}",
-                "welcome_message" when paramValues.Count >= 2 => $"🎉 Welcome {paramValues[0]} to {paramValues[1]}!",
-                "payment_reminder" when paramValues.Count >= 3 => $"💰 Invoice #{paramValues[0]} - Amount: {paramValues[1]}, Due: {paramValues[2]}",
-                _ => $"{templateName}: {string.Join(", ", paramValues)}"
-            };
-        }
-
         public async Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
         {
             try
@@ -1705,7 +1681,25 @@ namespace DriverConnectApp.API.Services
             return (content, type, mediaUrl, fileName, fileSize, mimeType, location, contactName, contactPhone);
         }
 
-        
+        private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
+        {
+            if (parameters == null || !parameters.Any())
+                return $"Template: {templateName}";
+
+            var paramValues = parameters
+                .OrderBy(p => p.Key)
+                .Select(p => p.Value)
+                .ToList();
+
+            // This should match the same logic as in MessagesController
+            return templateName.ToLower() switch
+            {
+                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
+                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
+                // Add other templates as needed
+                _ => $"{templateName}: {string.Join(", ", paramValues)}"
+            };
+        }
 
         // ✅ ADDED: Missing interface method implementation
         public Task SendWhatsAppMessageAsync(string phoneNumber, string message, bool isTemplate, MessageContext? context, int teamId)
