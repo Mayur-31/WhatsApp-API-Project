@@ -124,7 +124,7 @@ namespace DriverConnectApp.API.Services
 
                 _logger.LogInformation("📤 Sending WhatsApp text to {FormattedPhone}", formattedPhone);
 
-                var apiVersion = team.ApiVersion ?? "23.0";
+                var apiVersion = team.ApiVersion ?? "19.0";
                 var url = $"https://graph.facebook.com/v{apiVersion}/{team.WhatsAppPhoneNumberId}/messages";
 
                 var requestBody = new
@@ -628,9 +628,9 @@ namespace DriverConnectApp.API.Services
 
                 _logger.LogInformation("📱 Phone formatting: {Original} → {Formatted}", to, formattedPhone);
                 _logger.LogInformation("🔑 Using Phone ID: {PhoneId}, API v{Version}",
-                    team.WhatsAppPhoneNumberId, team.ApiVersion ?? "23.0");
+                    team.WhatsAppPhoneNumberId, team.ApiVersion ?? "19.0");
 
-                var apiVersion = string.IsNullOrEmpty(team.ApiVersion) ? "23.0" : team.ApiVersion;
+                var apiVersion = string.IsNullOrEmpty(team.ApiVersion) ? "19.0" : team.ApiVersion;
                 var url = $"https://graph.facebook.com/v{apiVersion}/{team.WhatsAppPhoneNumberId}/messages";
 
                 // ✅ BUILD PROPER WHATSAPP TEMPLATE STRUCTURE
@@ -1055,7 +1055,7 @@ namespace DriverConnectApp.API.Services
                 WhatsAppAccessToken = request.WhatsAppAccessToken,
                 WhatsAppBusinessAccountId = request.WhatsAppBusinessAccountId,
                 WhatsAppPhoneNumber = request.WhatsAppPhoneNumber,
-                ApiVersion = request.ApiVersion ?? "23.0",
+                ApiVersion = request.ApiVersion ?? "18.0",
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
