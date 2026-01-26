@@ -307,7 +307,7 @@ namespace DriverConnectApp.API.Controllers
 
             if (request.IsTemplateMessage)
             {
-                // ✅ Get rendered template content from service
+                // ✅ Get RENDERED template content (actual message text)
                 messageContent = _whatsAppService.RenderTemplateForDisplay(
                     request.TemplateName ?? string.Empty,
                     request.TemplateParameters);

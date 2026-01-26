@@ -96,11 +96,42 @@ const emit = defineEmits<{
   sent: [message: any];
 }>()
 
+
 const templateName = ref('')
 const templateParameters = ref<TemplateParameter[]>([])
 const sending = ref(false)
 const errorMessage = ref<string>('')
 const conversationStore = useConversationStore()
+
+
+const renderTemplateContent = (templateName: string, params: Record<string, string>): string => {
+  if (!templateName) return 'Template message';
+  const sortedKeys = Object.keys(params)
+    .filter(key => /^\d+$/.test(key)) // Only numeric keys
+    .sort((a, b) => parseInt(a) - parseInt(b));
+
+  const paramValues = sortedKeys.map(key => params[key]);
+  
+  switch (templateName.toLowerCase()) {
+    case 'hello_world':
+      return paramValues.length >= 1 
+        ? `Hello ${paramValues[0]}, welcome to our service! This is a test message from WhatsApp Business API.`
+        : 'Hello, welcome to our service! This is a test message from WhatsApp Business API.';
+    
+    case 'booking_confirmation':
+      return paramValues.length >= 3 
+        ? `Your booking #${paramValues[0]} has been confirmed for ${paramValues[1]} at ${paramValues[2]}.`
+        : `[${templateName}] ${paramValues.join(', ')}`;
+    
+    // Add other templates as needed...
+    
+    default:
+      return paramValues.length > 0 
+        ? `[${templateName}] ${paramValues.join(', ')}`
+        : `[${templateName}]`;
+  }
+};
+const optimisticContent = renderTemplateContent(templateName.value, templateParams);
 
 // Define template parameters based on template name
 const templateConfigs: Record<string, { name: string; displayName: string }[]> = {

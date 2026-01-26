@@ -1735,71 +1735,64 @@ namespace DriverConnectApp.API.Services
 
         public string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters)
         {
-            if (string.IsNullOrEmpty(templateName))
-                return string.Empty;
-
-            if (parameters == null || parameters.Count == 0)
-                return GetTemplateDefaultMessage(templateName);
+            if (string.IsNullOrWhiteSpace(templateName))
+                return "Template message";
 
             try
             {
-                var orderedParams = parameters
-                    .OrderBy(p => int.Parse(p.Key))
+                var orderedParams = parameters?
+                    .Where(p => int.TryParse(p.Key, out _)) // ✅ FIX: Numeric parsing
+                    .OrderBy(p => int.Parse(p.Key))          // ✅ FIX: Numeric ordering
                     .Select(p => p.Value)
-                    .ToList();
+                    .ToList() ?? new List<string>();
 
-                return RenderTemplateWithParameters(templateName, orderedParams);
+                return templateName.ToLowerInvariant() switch
+                {
+                    // ✅ ACTUAL TEMPLATE CONTENT FROM WHATSAPP BUSINESS
+                    "hello_world" when orderedParams.Count >= 1 =>
+                        $"Hello {orderedParams[0]}, welcome to our service! This is a test message from WhatsApp Business API.",
+                    "hello_world" =>
+                        "Hello, welcome to our service! This is a test message from WhatsApp Business API.",
+
+                    "booking_confirmation" when orderedParams.Count >= 3 =>
+                        $"Your booking #{orderedParams[0]} has been confirmed for {orderedParams[1]} at {orderedParams[2]}.",
+
+                    "delivery_update" when orderedParams.Count >= 2 =>
+                        $"Your delivery #{orderedParams[0]} is on the way. Estimated arrival: {orderedParams[1]}.",
+
+                    "welcome_message" when orderedParams.Count >= 2 =>
+                        $"Welcome to {orderedParams[0]}, {orderedParams[1]}! We're glad to have you with us.",
+
+                    "payment_reminder" when orderedParams.Count >= 3 =>
+                        $"Hello {orderedParams[0]}, this is a reminder that your payment of {orderedParams[1]} is due on {orderedParams[2]}.",
+
+                    "order_shipped" when orderedParams.Count >= 2 =>
+                        $"Your order #{orderedParams[0]} has been shipped. Tracking number: {orderedParams[1]}.",
+
+                    "appointment_reminder" when orderedParams.Count >= 3 =>
+                        $"Reminder: Your appointment with {orderedParams[0]} is on {orderedParams[1]} at {orderedParams[2]}.",
+
+                    "service_completed" when orderedParams.Count >= 2 =>
+                        $"Service #{orderedParams[0]} has been completed successfully. {orderedParams[1]}",
+
+                    "invoice_sent" when orderedParams.Count >= 3 =>
+                        $"Invoice #{orderedParams[0]} for {orderedParams[1]} has been issued. Amount: {orderedParams[2]}",
+
+                    "feedback_request" when orderedParams.Count >= 1 =>
+                        $"Hello {orderedParams[0]}, we'd love your feedback on our recent service!",
+
+                    // Default for other templates
+                    _ => orderedParams.Count > 0
+                        ? $"[{templateName}] {string.Join(", ", orderedParams)}"
+                        : $"[{templateName}]"
+                };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error rendering template {TemplateName}", templateName);
-                return $"Template: {templateName}";
+                _logger.LogError(ex, "❌ Failed to render template {TemplateName}", templateName);
+                return $"[Template: {templateName}]";
             }
         }
-
-        private string RenderTemplateWithParameters(string templateName, List<string> parameters)
-        {
-            return templateName.ToLower() switch
-            {
-                // ✅ Your approved WhatsApp templates
-                "hello_world" when parameters.Count >= 1 =>
-                    $"Hello {parameters[0]}, welcome to our service! This is a test message from WhatsApp Business API.",
-
-                "booking_confirmation" when parameters.Count >= 3 =>
-                    $"Your booking #{parameters[0]} has been confirmed for {parameters[1]} at {parameters[2]}.",
-
-                "delivery_update" when parameters.Count >= 2 =>
-                    $"Your delivery #{parameters[0]} is on the way. Estimated arrival: {parameters[1]}.",
-
-                "welcome_message" when parameters.Count >= 2 =>
-                    $"Welcome to {parameters[0]}, {parameters[1]}! We're glad to have you with us.",
-
-                "payment_reminder" when parameters.Count >= 3 =>
-                    $"Hello {parameters[0]}, this is a reminder that your payment of {parameters[1]} is due on {parameters[2]}.",
-
-                "order_shipped" when parameters.Count >= 2 =>
-                    $"Your order #{parameters[0]} has been shipped. Tracking number: {parameters[1]}.",
-
-                "appointment_reminder" when parameters.Count >= 3 =>
-                    $"Reminder: Your appointment with {parameters[0]} is on {parameters[1]} at {parameters[2]}.",
-
-                "service_completed" when parameters.Count >= 2 =>
-                    $"Service #{parameters[0]} has been completed successfully. {parameters[1]}",
-
-                "invoice_sent" when parameters.Count >= 3 =>
-                    $"Invoice #{parameters[0]} for {parameters[1]} has been issued. Amount: {parameters[2]}",
-
-                "feedback_request" when parameters.Count >= 1 =>
-                    $"Hello {parameters[0]}, we'd love your feedback on our recent service!",
-
-                // Add more approved templates as needed
-
-                _ => parameters.Count > 0
-                    ? $"{templateName}: {string.Join(", ", parameters)}"
-                    : GetTemplateDefaultMessage(templateName)
-            };
-        }
-
         private string GetTemplateDefaultMessage(string templateName)
         {
             return templateName.ToLower() switch
