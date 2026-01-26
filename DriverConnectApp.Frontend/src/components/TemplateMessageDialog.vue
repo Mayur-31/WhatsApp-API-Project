@@ -207,12 +207,11 @@ const send = async () => {
       }
     })
 
-    // ✅ CORRECT: Create optimistic message with ACCURATE placeholder
+    // Create a temporary placeholder (will be replaced by actual content)
     const optimisticMessage = {
       Id: 0,
-      // ✅ Display what we ACTUALLY know - template name + parameters
-      Content: `📋 Template: ${templateName.value}${Object.keys(templateParams).length > 0 ? ` (${Object.values(templateParams).join(', ')})` : ''}`,
-      MessageType: 'Template',
+      Content: `📋 Sending template: ${templateName.value}...`,
+      MessageType: 'Text',
       IsFromDriver: false,
       ConversationId: props.conversationId,
       TeamId: props.teamId,
@@ -234,12 +233,13 @@ const send = async () => {
     // Add optimistic update to store
     tempId = conversationStore.addMessageOptimistically(optimisticMessage as any)
 
-    // ✅ Get driver ID for the template API
+    // Get driver ID
     const driverId = await getDriverIdFromConversation()
     
     if (!driverId) {
       throw new Error('Could not find driver ID for this conversation')
     }
+
 
     // ✅ Use the CORRECT endpoint for template messages
     const response = await api.post('/messages/send-template', {
@@ -251,20 +251,21 @@ const send = async () => {
     })
     
     if (response.data && response.data.messageId) {
-      // ✅ Create updated message with backend data
-      const updatedMessage = {
+      // ✅ Use the actual content returned by backend
+      const actualContent = response.data.displayContent || 
+                           response.data.actualContent || 
+                           `Template: ${templateName.value}`;
+      
+      // Update message with real content from backend
+      conversationStore.updateMessageWithBackendData(tempId, {
         ...optimisticMessage,
         Id: response.data.messageId,
-        // ✅ Use displayContent or fallback to our placeholder
-        Content: response.data.actualContent || `📋 Template: ${templateName.value}`,
+        Content: actualContent, // ✅ Now this will show actual template content
         WhatsAppMessageId: response.data.whatsAppMessageId || `template_${response.data.messageId}`,
         Status: 'sent',
         status: 'sent' as const,
         tempId: undefined
-      }
-      
-      // Update optimistic message with backend data
-      conversationStore.updateMessageWithBackendData(tempId, updatedMessage)
+      })
       
       emit('sent', response.data)
       close()
@@ -275,7 +276,6 @@ const send = async () => {
   } catch (error: any) {
     console.error('Failed to send template:', error)
     
-    // Update status to indicate failure
     if (tempId) {
       conversationStore.updateMessageStatus(tempId, '', 'failed')
     }

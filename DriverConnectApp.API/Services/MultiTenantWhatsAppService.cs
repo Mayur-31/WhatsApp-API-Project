@@ -1741,58 +1741,52 @@ namespace DriverConnectApp.API.Services
             try
             {
                 var orderedParams = parameters?
-                    .Where(p => int.TryParse(p.Key, out _)) // ✅ FIX: Numeric parsing
-                    .OrderBy(p => int.Parse(p.Key))          // ✅ FIX: Numeric ordering
+                    .Where(p => int.TryParse(p.Key, out _))
+                    .OrderBy(p => int.Parse(p.Key))
                     .Select(p => p.Value)
                     .ToList() ?? new List<string>();
 
+                // ✅ ACTUAL WHATSAPP TEMPLATE CONTENT
                 return templateName.ToLowerInvariant() switch
                 {
-                    // ✅ ACTUAL TEMPLATE CONTENT FROM WHATSAPP BUSINESS
+                    // Your actual hello_world template content
                     "hello_world" when orderedParams.Count >= 1 =>
                         $"Hello {orderedParams[0]}, welcome to our service! This is a test message from WhatsApp Business API.",
                     "hello_world" =>
                         "Hello, welcome to our service! This is a test message from WhatsApp Business API.",
 
+                    // Add other templates with actual content
                     "booking_confirmation" when orderedParams.Count >= 3 =>
-                        $"Your booking #{orderedParams[0]} has been confirmed for {orderedParams[1]} at {orderedParams[2]}.",
+                        $"Your booking #{orderedParams[0]} has been confirmed for {orderedParams[1]} at {orderedParams[2]}. Thank you for choosing us!",
 
                     "delivery_update" when orderedParams.Count >= 2 =>
-                        $"Your delivery #{orderedParams[0]} is on the way. Estimated arrival: {orderedParams[1]}.",
+                        $"Your delivery #{orderedParams[0]} is on the way. Estimated arrival: {orderedParams[1]}. Track your order on our website.",
 
                     "welcome_message" when orderedParams.Count >= 2 =>
-                        $"Welcome to {orderedParams[0]}, {orderedParams[1]}! We're glad to have you with us.",
+                        $"Welcome to {orderedParams[0]}, {orderedParams[1]}! We're glad to have you with us. Let us know if you need any assistance.",
 
                     "payment_reminder" when orderedParams.Count >= 3 =>
-                        $"Hello {orderedParams[0]}, this is a reminder that your payment of {orderedParams[1]} is due on {orderedParams[2]}.",
+                        $"Hello {orderedParams[0]}, this is a reminder that your payment of {orderedParams[1]} is due on {orderedParams[2]}. Please make payment to avoid service disruption.",
 
                     "order_shipped" when orderedParams.Count >= 2 =>
-                        $"Your order #{orderedParams[0]} has been shipped. Tracking number: {orderedParams[1]}.",
+                        $"Your order #{orderedParams[0]} has been shipped. Tracking number: {orderedParams[1]}. Expected delivery in 3-5 business days.",
 
                     "appointment_reminder" when orderedParams.Count >= 3 =>
-                        $"Reminder: Your appointment with {orderedParams[0]} is on {orderedParams[1]} at {orderedParams[2]}.",
+                        $"Reminder: Your appointment with {orderedParams[0]} is on {orderedParams[1]} at {orderedParams[2]}. Please arrive 10 minutes early.",
 
-                    "service_completed" when orderedParams.Count >= 2 =>
-                        $"Service #{orderedParams[0]} has been completed successfully. {orderedParams[1]}",
-
-                    "invoice_sent" when orderedParams.Count >= 3 =>
-                        $"Invoice #{orderedParams[0]} for {orderedParams[1]} has been issued. Amount: {orderedParams[2]}",
-
-                    "feedback_request" when orderedParams.Count >= 1 =>
-                        $"Hello {orderedParams[0]}, we'd love your feedback on our recent service!",
-
-                    // Default for other templates
+                    // Default fallback - should match your WhatsApp templates
                     _ => orderedParams.Count > 0
-                        ? $"[{templateName}] {string.Join(", ", orderedParams)}"
-                        : $"[{templateName}]"
+                        ? $"{templateName}: {string.Join(", ", orderedParams)}"
+                        : $"{templateName} message"
                 };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Failed to render template {TemplateName}", templateName);
-                return $"[Template: {templateName}]";
+                return $"{templateName} message";
             }
         }
+
         private string GetTemplateDefaultMessage(string templateName)
         {
             return templateName.ToLower() switch

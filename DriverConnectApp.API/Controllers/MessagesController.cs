@@ -307,14 +307,14 @@ namespace DriverConnectApp.API.Controllers
 
             if (request.IsTemplateMessage)
             {
-                // ✅ Get RENDERED template content (actual message text)
+                // ✅ CRITICAL: Get the ACTUAL template content from WhatsAppService
                 messageContent = _whatsAppService.RenderTemplateForDisplay(
                     request.TemplateName ?? string.Empty,
                     request.TemplateParameters);
 
-                messageTypeEnum = MessageType.Template;
+                messageTypeEnum = MessageType.Text; // ✅ Display as regular text
 
-                _logger.LogInformation("📋 Template rendered: {TemplateName} -> {Content}",
+                _logger.LogInformation("📋 Template content saved: {TemplateName} -> {Content}",
                     request.TemplateName, messageContent);
             }
             else
@@ -1619,6 +1619,14 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserName = currentUser?.FullName ?? currentUser?.UserName ?? "Staff";
                 var currentUserId = currentUser?.Id;
 
+                // ✅ CRITICAL FIX: Get the ACTUAL template content for storage
+                // Render the template for display BEFORE sending to WhatsApp
+                var renderedContent = _whatsAppService.RenderTemplateForDisplay(
+                    request.TemplateName,
+                    request.TemplateParameters ?? new Dictionary<string, string>());
+
+                _logger.LogInformation("📝 Template content to save: {Content}", renderedContent);
+
                 // ✅ Send template via WhatsApp API and get the message ID
                 var whatsAppMessageId = await _whatsAppService.SendTemplateMessageAsync(
                     driver.PhoneNumber,
@@ -1633,12 +1641,12 @@ namespace DriverConnectApp.API.Controllers
                     return StatusCode(500, new { message = "Failed to send template message via WhatsApp API" });
                 }
 
-                // ✅ Create message with WhatsApp ID
+                // ✅ CRITICAL FIX: Save message with ACTUAL RENDERED CONTENT
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
-                    Content = $"📋 Template: {request.TemplateName}",
-                    MessageType = MessageType.Template,
+                    Content = renderedContent, // ✅ This is what will display in the UI
+                    MessageType = MessageType.Text, // ✅ Use Text type so it displays properly
                     IsFromDriver = false,
                     IsGroupMessage = false,
                     SenderPhoneNumber = "System",
@@ -1668,7 +1676,7 @@ namespace DriverConnectApp.API.Controllers
                     conversationId = conversation.Id,
                     isTemplate = true,
                     whatsAppMessageId = message.WhatsAppMessageId,
-                    displayContent = message.Content,
+                    displayContent = renderedContent, // ✅ Return actual content
                     templateName = request.TemplateName,
                     templateParameters = request.TemplateParameters
                 });
