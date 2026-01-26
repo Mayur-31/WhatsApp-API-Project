@@ -23,6 +23,8 @@ namespace DriverConnectApp.API.Services
 
         Task<string?> SendTemplateMessageAsync(string to, string templateName,
             Dictionary<string, string> templateParameters, int teamId, string? languageCode = "en_US");
+        string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters);
+
 
         // ✅ ADDED: Group message method
         Task<bool> SendGroupMessageAsync(string groupId, string messageText, string? mediaUrl, MessageType messageType, Team team);

@@ -27,6 +27,7 @@ namespace DriverConnectApp.API.Controllers
         private readonly IWebHostEnvironment _environment;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IMultiTenantWhatsAppService _whatsAppService;
+        private readonly IServiceProvider _serviceProvider;
 
         private const long MAX_IMAGE_UPLOAD = 100L * 1024 * 1024;
         private const long MAX_VIDEO_UPLOAD = 500L * 1024 * 1024;
@@ -43,13 +44,15 @@ namespace DriverConnectApp.API.Controllers
             AppDbContext context,
             IWebHostEnvironment environment,
             UserManager<ApplicationUser> userManager,
-            IMultiTenantWhatsAppService whatsAppService)
+            IMultiTenantWhatsAppService whatsAppService,
+            IServiceProvider serviceProvider)
         {
             _logger = logger;
             _context = context;
             _environment = environment;
             _userManager = userManager;
             _whatsAppService = whatsAppService;
+            _serviceProvider = serviceProvider;
         }
 
 
@@ -304,51 +307,15 @@ namespace DriverConnectApp.API.Controllers
 
             if (request.IsTemplateMessage)
             {
-                // ✅ Generate actual template message based on parameters
-                if (request.TemplateParameters != null && request.TemplateParameters.Any())
-                {
-                    // Get parameter values in order
-                    var paramValues = request.TemplateParameters
-                        .OrderBy(p => p.Key)
-                        .Select(p => p.Value)
-                        .ToList();
+                // ✅ Get rendered template content from service
+                messageContent = _whatsAppService.RenderTemplateForDisplay(
+                    request.TemplateName ?? string.Empty,
+                    request.TemplateParameters);
 
-                    // Customize based on your actual templates
-                    if (request.TemplateName == "hello_world" && paramValues.Count >= 1)
-                    {
-                        messageContent = $"Hello {paramValues[0]}, welcome to our service!";
-                    }
-                    else if (request.TemplateName == "welcome_message" && paramValues.Count >= 2)
-                    {
-                        messageContent = $"Welcome {paramValues[0]} to {paramValues[1]}!";
-                    }
-                    else if (request.TemplateName == "booking_confirmation" && paramValues.Count >= 3)
-                    {
-                        messageContent = $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.";
-                    }
-                    else if (request.TemplateName == "payment_reminder" && paramValues.Count >= 3)
-                    {
-                        messageContent = $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.";
-                    }
-                    else if (request.TemplateName == "order_shipped" && paramValues.Count >= 2)
-                    {
-                        messageContent = $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}";
-                    }
-                    else
-                    {
-                        // Generic fallback - show parameters
-                        var paramsText = string.Join(", ", paramValues);
-                        messageContent = $"{request.TemplateName}: {paramsText}";
-                    }
-                }
-                else
-                {
-                    // No parameters, just show template name
-                    messageContent = $"Template: {request.TemplateName}";
-                }
-
-                // Template messages should have Template type
                 messageTypeEnum = MessageType.Template;
+
+                _logger.LogInformation("📋 Template rendered: {TemplateName} -> {Content}",
+                    request.TemplateName, messageContent);
             }
             else
             {
@@ -426,8 +393,14 @@ namespace DriverConnectApp.API.Controllers
                 {
                     try
                     {
-                        await _whatsAppService.SendMessageAsync(sendRequest, teamId);
-                        _logger.LogInformation("✅ WhatsApp message sent: {MessageId}", message.Id);
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var scopedWhatsAppService = scope.ServiceProvider
+                                .GetRequiredService<IMultiTenantWhatsAppService>();
+
+                            await scopedWhatsAppService.SendMessageAsync(sendRequest, teamId);
+                            _logger.LogInformation("✅ WhatsApp message sent: {MessageId}", message.Id);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1707,10 +1680,6 @@ namespace DriverConnectApp.API.Controllers
             }
         }
     }
-
-
-
-
 
 
     public class CompressionResult

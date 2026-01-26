@@ -1733,6 +1733,91 @@ namespace DriverConnectApp.API.Services
             return (content, type, mediaUrl, fileName, fileSize, mimeType, location, contactName, contactPhone);
         }
 
+        public string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters)
+        {
+            if (string.IsNullOrEmpty(templateName))
+                return string.Empty;
+
+            if (parameters == null || parameters.Count == 0)
+                return GetTemplateDefaultMessage(templateName);
+
+            try
+            {
+                var orderedParams = parameters
+                    .OrderBy(p => int.Parse(p.Key))
+                    .Select(p => p.Value)
+                    .ToList();
+
+                return RenderTemplateWithParameters(templateName, orderedParams);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error rendering template {TemplateName}", templateName);
+                return $"Template: {templateName}";
+            }
+        }
+
+        private string RenderTemplateWithParameters(string templateName, List<string> parameters)
+        {
+            return templateName.ToLower() switch
+            {
+                // ✅ Your approved WhatsApp templates
+                "hello_world" when parameters.Count >= 1 =>
+                    $"Hello {parameters[0]}, welcome to our service! This is a test message from WhatsApp Business API.",
+
+                "booking_confirmation" when parameters.Count >= 3 =>
+                    $"Your booking #{parameters[0]} has been confirmed for {parameters[1]} at {parameters[2]}.",
+
+                "delivery_update" when parameters.Count >= 2 =>
+                    $"Your delivery #{parameters[0]} is on the way. Estimated arrival: {parameters[1]}.",
+
+                "welcome_message" when parameters.Count >= 2 =>
+                    $"Welcome to {parameters[0]}, {parameters[1]}! We're glad to have you with us.",
+
+                "payment_reminder" when parameters.Count >= 3 =>
+                    $"Hello {parameters[0]}, this is a reminder that your payment of {parameters[1]} is due on {parameters[2]}.",
+
+                "order_shipped" when parameters.Count >= 2 =>
+                    $"Your order #{parameters[0]} has been shipped. Tracking number: {parameters[1]}.",
+
+                "appointment_reminder" when parameters.Count >= 3 =>
+                    $"Reminder: Your appointment with {parameters[0]} is on {parameters[1]} at {parameters[2]}.",
+
+                "service_completed" when parameters.Count >= 2 =>
+                    $"Service #{parameters[0]} has been completed successfully. {parameters[1]}",
+
+                "invoice_sent" when parameters.Count >= 3 =>
+                    $"Invoice #{parameters[0]} for {parameters[1]} has been issued. Amount: {parameters[2]}",
+
+                "feedback_request" when parameters.Count >= 1 =>
+                    $"Hello {parameters[0]}, we'd love your feedback on our recent service!",
+
+                // Add more approved templates as needed
+
+                _ => parameters.Count > 0
+                    ? $"{templateName}: {string.Join(", ", parameters)}"
+                    : GetTemplateDefaultMessage(templateName)
+            };
+        }
+
+        private string GetTemplateDefaultMessage(string templateName)
+        {
+            return templateName.ToLower() switch
+            {
+                "hello_world" => "Hello! Welcome to our service.",
+                "booking_confirmation" => "Your booking has been confirmed.",
+                "delivery_update" => "Your delivery is on the way.",
+                "welcome_message" => "Welcome to our service!",
+                "payment_reminder" => "Payment reminder sent.",
+                "order_shipped" => "Your order has been shipped.",
+                "appointment_reminder" => "Appointment reminder sent.",
+                "service_completed" => "Service completed successfully.",
+                "invoice_sent" => "Invoice has been issued.",
+                "feedback_request" => "We'd love your feedback!",
+                _ => $"Template: {templateName}"
+            };
+        }
+
         private string GenerateTemplateDisplayContent(string templateName, Dictionary<string, string> parameters)
         {
             if (parameters == null || !parameters.Any())
@@ -1754,10 +1839,24 @@ namespace DriverConnectApp.API.Services
         }
 
         // ✅ ADDED: Missing interface method implementation
-        public Task SendWhatsAppMessageAsync(string phoneNumber, string message, bool isTemplate, MessageContext? context, int teamId)
+        public async Task<bool> SendWhatsAppMessageAsync(string phoneNumber, string message, bool isTemplate, MessageContext? context, int teamId)
         {
-            _logger.LogInformation("📨 SendWhatsAppMessageAsync called for phone {Phone}", phoneNumber);
-            return Task.CompletedTask;
+            try
+            {
+                if (isTemplate)
+                {
+                    _logger.LogWarning("SendWhatsAppMessageAsync called for template - use SendTemplateMessageAsync instead");
+                    return false;
+                }
+
+                // ✅ ACTUALLY SEND THE MESSAGE
+                return await SendWhatsAppTextMessageAsync(phoneNumber, message, teamId, false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in SendWhatsAppMessageAsync for {Phone}", phoneNumber);
+                return false;
+            }
         }
 
         public class WindowStatusDto
