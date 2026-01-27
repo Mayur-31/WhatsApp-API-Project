@@ -452,7 +452,8 @@
                 Send Template
               </button>
             </div>
-
+            <!-- Messages Container - Only this area scrolls -->
+            <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
             <!-- Messages Area -->
             <div 
               ref="chatContainer" 
@@ -748,6 +749,10 @@
                 </div>
               </div>
               <!-- Scroll to bottom button - FIXED: Absolute positioning -->
+              <div 
+                v-if="showScrollToBottom" 
+                class="sticky bottom-4 w-full flex justify-center pointer-events-none"
+              >
               <button 
                 v-if="showScrollToBottom" 
                 @click="scrollToBottom"
@@ -759,6 +764,8 @@
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
             <div 
