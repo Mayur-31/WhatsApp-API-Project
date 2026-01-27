@@ -83,7 +83,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8 flex flex-col">
+    <main class="w-full h-[calc(100vh-80px)] px-4 sm:px-6 lg:px-8 flex flex-col">
       <!-- Team Info Banner -->
       <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-blue-700 text-sm">
@@ -101,7 +101,7 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-full">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
         <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col min-h-0">
@@ -249,8 +249,8 @@
           
 
         <!-- Chat Area -->
-        <div class="relative flex-1 flex flex-col bg-gray-50 h-full min-h-0 overflow-hidden">
-          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
+        <div class="relative flex-1 flex flex-col bg-gray-50 h-full min-h-0">
+          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
             <p class="text-center">Select a conversation from the list to start chatting</p>
@@ -459,7 +459,7 @@
               ref="chatContainer" 
               class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-green-50"
               @scroll="handleScroll"
-              style="max-height: calc(100vh - 400px);"
+              
             >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
@@ -4243,6 +4243,15 @@ button {
   --tw-gradient-to: #16a34a;
 }
 
+.w-\[360px\] {
+  height: 100%;
+}
+
+.flex-1 {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 #f1f5f9;
@@ -4275,12 +4284,27 @@ button {
   scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }
 
+html, body {
+  height: 100%;
+}
+
+#app {
+  height: 100%;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
 /* Ensure parent containers don't overflow */
 .flex-col {
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
-
+.h-full {
+  height: 100%;
+}
 .min-h-0 {
   min-height: 0 !important;
 }
@@ -4291,6 +4315,13 @@ button {
   height: 100%;
 }
 
+.bg-gray-50 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* Fix for the chat messages area */
 .bg-green-50 {
   display: flex;
@@ -4299,10 +4330,10 @@ button {
 
 /* Scroll-to-bottom button animation */
 .scroll-to-bottom-button {
-  animation: slideInUp 0.3s ease-out;
-  position: absolute;
-  right: 24px;
+  position: absolute !important;
   bottom: 100px;
+  right: 24px;
+  z-index: 40;
 }
 
 @keyframes slideInUp {
