@@ -249,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
+        <div class="relative flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -454,7 +454,11 @@
             </div>
 
             <!-- Messages Area -->
-            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+            <div 
+              ref="chatContainer" 
+              class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-green-50 min-h-0"
+              @scroll="handleScroll"
+            >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -468,6 +472,7 @@
                 </p>
               </div>
               <div v-else>
+
                 <div 
                   v-for="(message, index) in messages" 
                   :key="message.Id"
@@ -742,6 +747,17 @@
                   </div>
                 </div>
               </div>
+              <!-- Scroll to bottom button - FIXED: Absolute positioning -->
+              <button 
+                v-if="showScrollToBottom" 
+                @click="scrollToBottom"
+                class="absolute bottom-24 right-6 bg-green-600 hover:bg-green-700 text-white p-3 rounded-full shadow-lg transition-all duration-300 z-40 flex items-center justify-center scroll-to-bottom-button"
+                title="Scroll to latest messages"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </button>
             </div>
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
@@ -1714,6 +1730,9 @@ const selectedTeam = ref<any>(null);
 const showActionMenu = ref(false);
 const showActionsDropdown = ref(false);
 
+const showScrollToBottom = ref(false);
+const isScrolledToBottom = ref(true);
+
 // 24-hour window state
 const showTemplateDialog = ref(false);
 const templatePhoneNumber = ref('');
@@ -1722,6 +1741,33 @@ const windowStatusPollInterval = ref<number | null>(null);
 // ✅ NEW: Window status polling interval
 
 const searchQuery = ref('');
+
+const handleScroll = () => {
+  if (!chatContainer.value) return;
+  
+  const container = chatContainer.value;
+  const scrollPosition = container.scrollTop;
+  const containerHeight = container.clientHeight;
+  const scrollHeight = container.scrollHeight;
+  
+  // Calculate distance from bottom (in pixels)
+  const distanceFromBottom = scrollHeight - scrollPosition - containerHeight;
+  
+  // WhatsApp behavior: Show button when > 200px from bottom
+  isScrolledToBottom.value = distanceFromBottom < 100;
+  showScrollToBottom.value = distanceFromBottom > 200;
+};
+
+// Scroll to bottom and hide button
+const scrollToBottom = async () => {
+  await nextTick();
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    showScrollToBottom.value = false;
+    isScrolledToBottom.value = true;
+  }
+};
+
 
 const closeDropdownOnClickOutside = (event) => {
   if (!event.target.closest('.action-dropdown-container')) {
@@ -2407,6 +2453,27 @@ watch(messages, (newMessages) => {
     preloadMedia();
   }
 }, { deep: true });
+
+watch(messages, async (newMessages, oldMessages) => {
+  await nextTick();
+  
+  // Only auto-scroll if user is currently at the bottom
+  if (isScrolledToBottom.value && newMessages.length > 0) {
+    // Check if there are actually new messages (not just reordered)
+    const oldLastId = oldMessages?.[oldMessages.length - 1]?.Id;
+    const newLastId = newMessages[newMessages.length - 1]?.Id;
+    
+    if (!oldLastId || newLastId !== oldLastId) {
+      await scrollToBottom();
+    }
+  }
+}, { deep: true });
+
+// Reset scroll state when switching conversations
+watch(() => selectedConversation.value?.Id, () => {
+  showScrollToBottom.value = false;
+  isScrolledToBottom.value = true;
+});
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3312,12 +3379,7 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = async () => {
-  await nextTick();
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-  }
-};
+
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
   if (index === 0) return true;
@@ -4172,4 +4234,57 @@ button {
 .to-green-600 {
   --tw-gradient-to: #16a34a;
 }
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Fix for Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+/* Ensure parent containers don't overflow */
+.flex-col {
+  min-height: 0;
+}
+
+/* Scroll-to-bottom button animation */
+.scroll-to-bottom-button {
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 </style>
