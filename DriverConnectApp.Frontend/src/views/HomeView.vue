@@ -260,7 +260,7 @@
               <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
             </p>
           </div>
-          <div v-else class="h-[600px] flex flex-col">
+          <div v-else class="flex-1 flex flex-col">
             <!-- Chat Header -->
             <div class="bg-gray-50 border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <div class="flex items-center justify-between">
