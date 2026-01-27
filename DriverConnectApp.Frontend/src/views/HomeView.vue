@@ -249,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="relative flex-1 flex flex-col bg-gray-50 min-h-0">
+        <div class="relative flex-1 flex flex-col bg-gray-50 h-full min-h-0 overflow-hidden">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
