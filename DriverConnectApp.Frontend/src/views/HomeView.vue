@@ -824,7 +824,7 @@
             
             
             <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t">
+            <div class="bg-white px-6 py-4 border-t flex-shrink-0">
               <div class="flex space-x-4 items-start">
                 <!-- Media Toggle Button -->
                 <button 
