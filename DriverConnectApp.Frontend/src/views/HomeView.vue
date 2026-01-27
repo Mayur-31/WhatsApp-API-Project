@@ -246,16 +246,23 @@
               </div>
             </div>
           </div>
-        </div>  
           
 
-        <!-- Chat Area - FIXED LAYOUT -->
-        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
-          
-          <!-- Fixed Top Section: Header and Warnings -->
-          <div class="flex-shrink-0">
+        <!-- Chat Area -->
+        <div class="flex-1 flex flex-col bg-white">
+          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
+            <div class="text-6xl mb-4">💬</div>
+            <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
+            <p class="text-center">Select a conversation from the list to start chatting</p>
+            <p class="text-sm mt-2 text-gray-400">
+              Use filters to find specific conversations
+              <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
+              <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
+            </p>
+          </div>
+          <div v-else class="h-[600px] flex flex-col">
             <!-- Chat Header -->
-            <div class="bg-white border-b border-gray-200 px-4 py-3">
+            <div class="bg-gray-50 border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <div class="flex items-center justify-between">
     
               <!-- Left: Contact Info -->
@@ -446,399 +453,378 @@
               </button>
             </div>
 
-          </div>
-
-          <!-- Scrollable Messages Area - THIS WILL SCROLL -->
-          <div class="flex-1 min-h-0 overflow-y-auto" ref="chatContainer">
-            <!-- UPDATED: Move the no-messages/loading states INSIDE here -->
-            <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8">
-              <div class="text-6xl mb-4">💬</div>
-              <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
-              <p class="text-center">Select a conversation from the list to start chatting</p>
-              <p class="text-sm mt-2 text-gray-400">
-                Use filters to find specific conversations
-                <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
-                <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
-              </p>
-            </div>
-            
-            <div v-else-if="messagesLoading" class="flex items-center justify-center h-full">
-              <div class="text-center">
+            <!-- Messages Area -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+              <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                <p>Loading messages...</p>
+                Loading messages...
               </div>
-            </div>
-            
-            <div v-else-if="!messages || messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500 p-8">
-              <div class="text-4xl mb-2">💭</div>
-              <p class="text-lg font-semibold">No messages yet</p>
-              <p class="text-sm">Start the conversation by sending a message!</p>
-              <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
-                This is a group conversation. Messages will be sent to all group members.
-              </p>
-            </div>
-            
-            <div v-else class="p-6 space-y-4">
-              <!-- ... YOUR EXISTING MESSAGE RENDERING LOOP ... -->
-              <div 
-                v-for="(message, index) in messages" 
-                :key="message.Id"
-                :id="`message-${message.Id}`"
-                :class="['message-container group', { 'highlighted': highlightedMessageId === message.Id }]"
-                @contextmenu="openMessageMenu(message, $event)"
-              >
-                <!-- Date Separator -->
-                <div v-if="shouldShowDateSeparator(message, index)" class="text-center my-4">
-                  <span class="bg-white px-3 py-1 rounded-full text-xs text-gray-500 border">
-                    {{ message.FormattedDate || formatMessageDate(message.SentAt) }}
-                  </span>
-                </div>
-                
-                <!-- Message -->
-                <div :class="['flex', message.IsFromDriver ? 'justify-start' : 'justify-end']">
-                  <div :class="['max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow-sm', message.IsFromDriver ? 'bg-white text-gray-800 border border-gray-200' : 'bg-green-500 text-white']">
-                    
-                    <!-- ENHANCED: Sender Info for ALL Group Messages -->
-                    <div v-if="message.IsGroupMessage" class="text-xs font-semibold mb-1 flex items-center space-x-2"
-                        :class="message.IsFromDriver ? 'text-gray-700' : 'text-green-100'">
-                      <span class="text-lg">👤</span>
-                      <span>{{ getEnhancedSenderName(message) }}</span>
-                      <!-- Staff/Driver badge -->
-                      <span v-if="!message.IsFromDriver" class="staff-badge">
-                        Staff
-                      </span>
-                      <span v-else class="driver-badge">
-                        Driver
-                      </span>
-                      <!-- Show actual staff name if available -->
-                      <span v-if="!message.IsFromDriver && message.SentByUserName" class="text-xs opacity-75">
-                        ({{ message.SentByUserName }})
-                      </span>
-                    </div>
-
-                    <!-- Individual message sender info (for non-group staff messages) -->
-                    <div v-else-if="!message.IsFromDriver" 
-                        class="text-xs font-semibold mb-1 text-green-100 flex items-center space-x-2">
-                      <span class="text-lg">👤</span>
-                      <span>{{ message.SentByUserName || 'Staff' }}</span>
-                      <span class="staff-badge">Staff</span>
-                    </div>
-                    
-                    <!-- ENHANCED: Clickable Reply Context with Staff/Driver Info -->
-                    <div 
-                      v-if="message.ReplyToMessageId" 
-                      class="reply-context mb-2 p-2 rounded text-xs cursor-pointer transition-all"
-                      :class="message.IsFromDriver ? 'bg-gray-100 text-gray-600 border-l-4 border-gray-400' : 'bg-green-400 text-white border-l-4 border-green-600'"
-                      @click="scrollToRepliedMessage(message.ReplyToMessageId)"
-                      :title="`Click to view the original message from ${getEnhancedReplySenderName(message)}`"
-                    >
-                      <div class="font-semibold flex items-center space-x-1 mb-1">
-                        <span>↩️</span>
-                        <span>Replying to {{ getEnhancedReplySenderName(message) }}</span>
-                      </div>
-                      <p class="truncate opacity-90">{{ message.ReplyToMessageContent || message.ReplyToMessage?.Content || 'Previous message' }}</p>
-                    </div>
-                    
-                    <!-- Image Message -->
-                    <div v-if="message.MessageType === 'Image'" class="text-center">
-                      <div class="relative">
-                        <!-- Loading spinner -->
-                        <div v-if="imageLoadingStates[message.Id]" 
-                            class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
-                          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                          <span class="ml-2 text-sm">Loading image...</span>
-                        </div>
-                        
-                        <!-- Error state -->
-                        <div v-if="imageErrors[message.Id]" 
-                            class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
-                          <div class="text-red-500 text-2xl mb-2">❌</div>
-                          <p class="text-red-600 text-sm mb-2">Failed to load image</p>
-                          <button 
-                            @click="retryImageLoad(message)" 
-                            class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-                            Retry
-                          </button>
-                        </div>
-                        
-                        <!-- Image -->
-                        <img 
-                          v-show="!imageLoadingStates[message.Id] && !imageErrors[message.Id]"
-                          :src="getMediaUrl(message.MediaUrl)" 
-                          :alt="message.FileName || 'Image'" 
-                          class="max-w-full h-auto rounded-lg mb-2 max-h-64 object-cover cursor-pointer"
-                          @click="openImageModal(getMediaUrl(message.MediaUrl))"
-                          @load="handleImageLoad(message.Id)"
-                          @error="handleImageError(message.Id, $event)"
-                          loading="lazy"
-                          :key="'img-' + message.Id + '-' + imageRetryCount[message.Id]"
-                        />
-                      </div>
+              <div v-else-if="!messages || messages.length === 0" class="text-center text-gray-500 py-8">
+                <div class="text-4xl mb-2">💭</div>
+                <p class="text-lg font-semibold">No messages yet</p>
+                <p class="text-sm">Start the conversation by sending a message!</p>
+                <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
+                  This is a group conversation. Messages will be sent to all group members.
+                </p>
+              </div>
+              <div v-else>
+                <div 
+                  v-for="(message, index) in messages" 
+                  :key="message.Id"
+                  :id="`message-${message.Id}`"
+                  :class="['message-container group', { 'highlighted': highlightedMessageId === message.Id }]"
+                  @contextmenu="openMessageMenu(message, $event)"
+                >
+                  <!-- Date Separator -->
+                  <div v-if="shouldShowDateSeparator(message, index)" class="text-center my-4">
+                    <span class="bg-white px-3 py-1 rounded-full text-xs text-gray-500 border">
+                      {{ message.FormattedDate || formatMessageDate(message.SentAt) }}
+                    </span>
+                  </div>
+                  
+                  <!-- Message -->
+                  <div :class="['flex', message.IsFromDriver ? 'justify-start' : 'justify-end']">
+                    <div :class="['max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow-sm', message.IsFromDriver ? 'bg-white text-gray-800 border border-gray-200' : 'bg-green-500 text-white']">
                       
-                      <!-- Image caption -->
-                      <p v-if="message.Content && !isDefaultImageCaption(message.Content)" 
-                        class="text-sm break-words mt-2">
-                        {{ message.Content }}
-                      </p>
-                      
-                      <!-- Image metadata -->
-                      <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                        <span>{{ message.FileName || 'Image' }}</span>
-                        <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
-                      </div>
-                    </div>
-                    
-                    <!-- Video Message -->
-                    <div v-else-if="message.MessageType === 'Video'" class="text-center">
-                      <div class="relative">
-                        <!-- Loading spinner -->
-                        <div v-if="videoLoadingStates[message.Id]" 
-                            class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
-                          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                          <span class="ml-2 text-sm">Loading video...</span>
-                        </div>
-                        
-                        <!-- Error state -->
-                        <div v-if="videoErrors[message.Id]" 
-                            class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
-                          <div class="text-red-500 text-2xl mb-2">❌</div>
-                          <p class="text-red-600 text-sm mb-2">Failed to load video</p>
-                          <button 
-                            @click="retryVideoLoad(message)" 
-                            class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-                            Retry
-                          </button>
-                        </div>
-                        
-                        <!-- Video -->
-                        <video 
-                          v-show="!videoLoadingStates[message.Id] && !videoErrors[message.Id]"
-                          :src="getMediaUrl(message.MediaUrl)" 
-                          controls 
-                          class="max-w-full h-auto rounded-lg mb-2 max-h-64"
-                          @loadstart="handleVideoLoadStart(message.Id)"
-                          @loadeddata="handleVideoLoad(message.Id)"
-                          @error="handleVideoError(message.Id, $event)"
-                          :key="'video-' + message.Id + '-' + videoRetryCount[message.Id]"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      </div>
-                      <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
-                      <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                        <span>{{ message.FileName || 'Video' }}</span>
-                        <span>{{ formatFileSize(message.FileSize) }}</span>
-                      </div>
-                    </div>
-                    
-                    <!-- Audio Message -->
-                    <div v-else-if="message.MessageType === 'Audio'" class="text-center">
-                      <div class="relative">
-                        <!-- Loading spinner -->
-                        <div v-if="audioLoadingStates[message.Id]" 
-                            class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[80px]">
-                          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                          <span class="ml-2 text-sm">Loading audio...</span>
-                        </div>
-                        
-                        <!-- Error state -->
-                        <div v-if="audioErrors[message.Id]" 
-                            class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[80px] flex flex-col items-center justify-center">
-                          <div class="text-red-500 text-2xl mb-2">❌</div>
-                          <p class="text-red-600 text-sm mb-2">Failed to load audio</p>
-                          <button 
-                            @click="retryAudioLoad(message)" 
-                            class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-                            Retry
-                          </button>
-                        </div>
-                        
-                        <!-- Audio -->
-                        <audio 
-                          v-show="!audioLoadingStates[message.Id] && !audioErrors[message.Id]"
-                          :src="getMediaUrl(message.MediaUrl)" 
-                          controls 
-                          class="w-full mb-2"
-                          @loadstart="handleAudioLoadStart(message.Id)"
-                          @loadeddata="handleAudioLoad(message.Id)"
-                          @error="handleAudioError(message.Id, $event)"
-                          :key="'audio-' + message.Id + '-' + audioRetryCount[message.Id]"
-                        >
-                          Your browser does not support the audio element.
-                        </audio>
-                      </div>
-                      <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
-                      <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                        <span>{{ message.FileName || 'Audio' }}</span>
-                        <span>{{ formatFileSize(message.FileSize) }}</span>
-                      </div>
-                    </div>
-                    
-                    <!-- Document Message -->
-                    <div v-else-if="message.MessageType === 'Document'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
-                      <div class="text-2xl">📄</div>
-                      <div class="flex-1">
-                        <a :href="getMediaUrl(message.MediaUrl)" 
-                          target="_blank" 
-                          class="font-medium hover:underline block" 
-                          @click.stop
-                          :class="message.IsFromDriver ? 'text-gray-800' : 'text-white'">
-                          {{ message.FileName || 'Document' }}
-                        </a>
-                        <p class="text-xs opacity-75">{{ formatFileSize(message.FileSize) }}</p>
-                        <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
-                      </div>
-                    </div>
-                    
-                    <!-- Location Message -->
-                    <div v-else-if="message.MessageType === 'Location'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
-                      <div class="text-2xl">📍</div>
-                      <div class="flex-1">
-                        <p class="font-medium">Location Shared</p>
-                        <a v-if="message.Location" 
-                          :href="`https://maps.google.com/?q=${message.Location}`" 
-                          target="_blank" 
-                          class="text-sm opacity-75 hover:underline block"
-                          @click.stop
-                          :class="message.IsFromDriver ? 'text-gray-600' : 'text-green-100'"
-                        >
-                          View on Google Maps
-                        </a>
-                        <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
-                      </div>
-                    </div>
-                    
-                    <!-- Text Message -->
-                    <div v-else>
-                      <p class="text-sm break-words">{{ message.Content }}</p>
-                    </div>
-                    
-                    <!-- WhatsApp Message Status & Interactions -->
-                    <div class="flex items-center justify-between mt-1">
-                      <div class="flex items-center space-x-1">
-                        <!-- Quick Reactions -->
-                        <button 
-                          v-for="reaction in commonReactions" 
-                          :key="reaction"
-                          @click="reactToMessage(message, reaction)"
-                          class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-sm hover:scale-125 transform"
-                          :title="`React with ${reaction}`"
-                        >
-                          {{ reaction }}
-                        </button>
-                        
-                        <!-- Existing reply button -->
-                        <button 
-                          v-if="selectedConversation"
-                          @click="startReply(message)"
-                          class="text-xs opacity-70 hover:opacity-100 transition-opacity flex items-center space-x-1"
-                          :class="message.IsFromDriver ? 'text-gray-500' : 'text-green-100'"
-                        >
-                          <span>↩️</span>
-                          <span>Reply</span>
-                        </button>
-                      </div>
-                      
-                      <!-- Message Status and Time -->
-                      <div class="flex items-center space-x-1 text-xs opacity-70">
-                        <span v-if="message.IsStarred" title="Starred">⭐</span>
-                        <span v-if="message.IsPinned" title="Pinned">📌</span>
-                        <span v-if="message.ForwardCount > 0" :title="`Forwarded ${message.ForwardCount} times`">
-                          ↩️{{ message.ForwardCount }}
+                      <!-- ENHANCED: Sender Info for ALL Group Messages -->
+                      <div v-if="message.IsGroupMessage" class="text-xs font-semibold mb-1 flex items-center space-x-2"
+                          :class="message.IsFromDriver ? 'text-gray-700' : 'text-green-100'">
+                        <span class="text-lg">👤</span>
+                        <span>{{ getEnhancedSenderName(message) }}</span>
+                        <!-- Staff/Driver badge -->
+                        <span v-if="!message.IsFromDriver" class="staff-badge">
+                          Staff
                         </span>
-                        <span :title="`Message status: ${message.Status}`">{{ message.StatusIcon }}</span>
-                        <span>{{ message.FormattedTime || formatMessageTime(message.SentAt) }}</span>
+                        <span v-else class="driver-badge">
+                          Driver
+                        </span>
+                        <!-- Show actual staff name if available -->
+                        <span v-if="!message.IsFromDriver && message.SentByUserName" class="text-xs opacity-75">
+                          ({{ message.SentByUserName }})
+                        </span>
+                      </div>
+
+                      <!-- Individual message sender info (for non-group staff messages) -->
+                      <div v-else-if="!message.IsFromDriver" 
+                          class="text-xs font-semibold mb-1 text-green-100 flex items-center space-x-2">
+                        <span class="text-lg">👤</span>
+                        <span>{{ message.SentByUserName || 'Staff' }}</span>
+                        <span class="staff-badge">Staff</span>
+                      </div>
+                      
+                      <!-- ENHANCED: Clickable Reply Context with Staff/Driver Info -->
+                      <div 
+                        v-if="message.ReplyToMessageId" 
+                        class="reply-context mb-2 p-2 rounded text-xs cursor-pointer transition-all"
+                        :class="message.IsFromDriver ? 'bg-gray-100 text-gray-600 border-l-4 border-gray-400' : 'bg-green-400 text-white border-l-4 border-green-600'"
+                        @click="scrollToRepliedMessage(message.ReplyToMessageId)"
+                        :title="`Click to view the original message from ${getEnhancedReplySenderName(message)}`"
+                      >
+                        <div class="font-semibold flex items-center space-x-1 mb-1">
+                          <span>↩️</span>
+                          <span>Replying to {{ getEnhancedReplySenderName(message) }}</span>
+                        </div>
+                        <p class="truncate opacity-90">{{ message.ReplyToMessageContent || message.ReplyToMessage?.Content || 'Previous message' }}</p>
+                      </div>
+                      
+                      <!-- Image Message -->
+                      <div v-if="message.MessageType === 'Image'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="imageLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading image...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="imageErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load image</p>
+                            <button 
+                              @click="retryImageLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Image -->
+                          <img 
+                            v-show="!imageLoadingStates[message.Id] && !imageErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            :alt="message.FileName || 'Image'" 
+                            class="max-w-full h-auto rounded-lg mb-2 max-h-64 object-cover cursor-pointer"
+                            @click="openImageModal(getMediaUrl(message.MediaUrl))"
+                            @load="handleImageLoad(message.Id)"
+                            @error="handleImageError(message.Id, $event)"
+                            loading="lazy"
+                            :key="'img-' + message.Id + '-' + imageRetryCount[message.Id]"
+                          />
+                        </div>
+                        
+                        <!-- Image caption -->
+                        <p v-if="message.Content && !isDefaultImageCaption(message.Content)" 
+                          class="text-sm break-words mt-2">
+                          {{ message.Content }}
+                        </p>
+                        
+                        <!-- Image metadata -->
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Image' }}</span>
+                          <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Video Message -->
+                      <div v-else-if="message.MessageType === 'Video'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="videoLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading video...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="videoErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load video</p>
+                            <button 
+                              @click="retryVideoLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Video -->
+                          <video 
+                            v-show="!videoLoadingStates[message.Id] && !videoErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            controls 
+                            class="max-w-full h-auto rounded-lg mb-2 max-h-64"
+                            @loadstart="handleVideoLoadStart(message.Id)"
+                            @loadeddata="handleVideoLoad(message.Id)"
+                            @error="handleVideoError(message.Id, $event)"
+                            :key="'video-' + message.Id + '-' + videoRetryCount[message.Id]"
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                        <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Video' }}</span>
+                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Audio Message -->
+                      <div v-else-if="message.MessageType === 'Audio'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="audioLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[80px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading audio...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="audioErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[80px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load audio</p>
+                            <button 
+                              @click="retryAudioLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Audio -->
+                          <audio 
+                            v-show="!audioLoadingStates[message.Id] && !audioErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            controls 
+                            class="w-full mb-2"
+                            @loadstart="handleAudioLoadStart(message.Id)"
+                            @loadeddata="handleAudioLoad(message.Id)"
+                            @error="handleAudioError(message.Id, $event)"
+                            :key="'audio-' + message.Id + '-' + audioRetryCount[message.Id]"
+                          >
+                            Your browser does not support the audio element.
+                          </audio>
+                        </div>
+                        <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Audio' }}</span>
+                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Document Message -->
+                      <div v-else-if="message.MessageType === 'Document'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
+                        <div class="text-2xl">📄</div>
+                        <div class="flex-1">
+                          <a :href="getMediaUrl(message.MediaUrl)" 
+                            target="_blank" 
+                            class="font-medium hover:underline block" 
+                            @click.stop
+                            :class="message.IsFromDriver ? 'text-gray-800' : 'text-white'">
+                            {{ message.FileName || 'Document' }}
+                          </a>
+                          <p class="text-xs opacity-75">{{ formatFileSize(message.FileSize) }}</p>
+                          <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
+                        </div>
+                      </div>
+                      
+                      <!-- Location Message -->
+                      <div v-else-if="message.MessageType === 'Location'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
+                        <div class="text-2xl">📍</div>
+                        <div class="flex-1">
+                          <p class="font-medium">Location Shared</p>
+                          <a v-if="message.Location" 
+                            :href="`https://maps.google.com/?q=${message.Location}`" 
+                            target="_blank" 
+                            class="text-sm opacity-75 hover:underline block"
+                            @click.stop
+                            :class="message.IsFromDriver ? 'text-gray-600' : 'text-green-100'"
+                          >
+                            View on Google Maps
+                          </a>
+                          <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
+                        </div>
+                      </div>
+                      
+                      <!-- Text Message -->
+                      <div v-else>
+                        <p class="text-sm break-words">{{ message.Content }}</p>
+                      </div>
+                      
+                      <!-- WhatsApp Message Status & Interactions -->
+                      <div class="flex items-center justify-between mt-1">
+                        <div class="flex items-center space-x-1">
+                          <!-- Quick Reactions -->
+                          <button 
+                            v-for="reaction in commonReactions" 
+                            :key="reaction"
+                            @click="reactToMessage(message, reaction)"
+                            class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-sm hover:scale-125 transform"
+                            :title="`React with ${reaction}`"
+                          >
+                            {{ reaction }}
+                          </button>
+                          
+                          <!-- Existing reply button -->
+                          <button 
+                            v-if="selectedConversation"
+                            @click="startReply(message)"
+                            class="text-xs opacity-70 hover:opacity-100 transition-opacity flex items-center space-x-1"
+                            :class="message.IsFromDriver ? 'text-gray-500' : 'text-green-100'"
+                          >
+                            <span>↩️</span>
+                            <span>Reply</span>
+                          </button>
+                        </div>
+                        
+                        <!-- Message Status and Time -->
+                        <div class="flex items-center space-x-1 text-xs opacity-70">
+                          <span v-if="message.IsStarred" title="Starred">⭐</span>
+                          <span v-if="message.IsPinned" title="Pinned">📌</span>
+                          <span v-if="message.ForwardCount > 0" :title="`Forwarded ${message.ForwardCount} times`">
+                            ↩️{{ message.ForwardCount }}
+                          </span>
+                          <span :title="`Message status: ${message.Status}`">{{ message.StatusIcon }}</span>
+                          <span>{{ message.FormattedTime || formatMessageTime(message.SentAt) }}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Fixed Bottom Section: Dynamic Content and Input -->
-          <div class="flex-shrink-0 bg-white border-t border-gray-200">
-            <!-- Dynamic Content Area (Reply, Upload, File Info, Media Options) -->
-            <div class="space-y-0">
-              <!-- Reply Context Bar -->
-              <div 
-                v-if="replyingToMessage" 
-                class="bg-blue-50 px-6 py-2 border-b border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
-                @click="scrollToRepliedMessage(replyingToMessage.Id)"
+            <!-- ENHANCED: Clickable Reply Context Bar -->
+            <div 
+              v-if="replyingToMessage" 
+              class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
+              @click="scrollToRepliedMessage(replyingToMessage.Id)"
+              :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
+            >
+              <div class="flex items-center space-x-2">
+                <span class="text-blue-600">↩️</span>
+                <span class="text-sm text-blue-700">Replying to {{ getEnhancedSenderName(replyingToMessage) }}</span>
+                <span class="text-xs text-blue-600 truncate max-w-xs">{{ getReplyPreview(replyingToMessage) }}</span>
+              </div>
+              <button 
+                @click.stop="cancelReply"
+                class="text-red-500 hover:text-red-700 text-lg font-bold"
               >
-                <div class="flex items-center space-x-2">
-                  <span class="text-blue-600">↩️</span>
-                  <span class="text-sm text-blue-700">Replying to {{ getEnhancedSenderName(replyingToMessage) }}</span>
-                  <span class="text-xs text-blue-600 truncate max-w-xs">{{ getReplyPreview(replyingToMessage) }}</span>
-                </div>
+                ×
+              </button>
+            </div>
+
+            <!-- Upload Progress Section -->
+            <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
+                <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
+              </div>
+              <div class="w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  class="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out" 
+                  :style="{ width: uploadProgress + '%' }"
+                ></div>
+              </div>
+            </div>
+
+            <!-- File Info Section -->
+            <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-green-700">
+                  📎 {{ uploadedFile.name }} ({{ fileInfo }})
+                </span>
                 <button 
-                  @click.stop="cancelReply"
+                  @click="showFileInfo = false; uploadedFile = null" 
                   class="text-red-500 hover:text-red-700 text-lg font-bold"
                 >
                   ×
                 </button>
               </div>
-
-              <!-- Upload Progress -->
-              <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-b border-blue-200">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
-                  <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
-                </div>
-                <div class="w-full bg-blue-200 rounded-full h-2">
-                  <div 
-                    class="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out" 
-                    :style="{ width: uploadProgress + '%' }"
-                  ></div>
-                </div>
-              </div>
-
-              <!-- File Info -->
-              <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-b border-green-200">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-green-700">
-                    📎 {{ uploadedFile.name }} ({{ fileInfo }})
-                  </span>
-                  <button 
-                    @click="showFileInfo = false; uploadedFile = null" 
-                    class="text-red-500 hover:text-red-700 text-lg font-bold"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              <!-- Media Options -->
-              <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-b">
-                <div class="flex justify-between items-center mb-3">
-                  <span class="text-sm font-medium text-gray-700">Send Media</span>
-                  <button 
-                    @click="showFileSizeLimits" 
-                    class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded flex items-center space-x-1"
-                  >
-                    <span>📏</span>
-                    <span>Size Limits</span>
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <button @click="openGallery" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>🖼️</span>
-                    <span>Gallery</span>
-                  </button>
-                  <button @click="sendLocation" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>📍</span>
-                    <span>Location</span>
-                  </button>
-                  <button @click="sendDocument" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>📄</span>
-                    <span>Document</span>
-                  </button>
-                </div>
-              </div>
             </div>
 
-            <!-- Fixed Message Input -->
-            <div class="bg-white px-6 py-4">
+            <!-- Enhanced Media Options -->
+            <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t">
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-sm font-medium text-gray-700">Send Media</span>
+                <button 
+                  @click="showFileSizeLimits" 
+                  class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded flex items-center space-x-1"
+                >
+                  <span>📏</span>
+                  <span>Size Limits</span>
+                </button>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button @click="openGallery" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>🖼️</span>
+                  <span>Gallery</span>
+                </button>
+                <button @click="sendLocation" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>📍</span>
+                  <span>Location</span>
+                </button>
+                <button @click="sendDocument" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>📄</span>
+                  <span>Document</span>
+                </button>
+              </div>
+            </div>
+            
+            
+            
+            <!-- Message Input -->
+            <div class="bg-white px-6 py-4 border-t">
               <div class="flex space-x-4 items-start">
                 <!-- Media Toggle Button -->
                 <button 
@@ -911,6 +897,7 @@
             </div>
           </div>
         </div>
+      </div>
     </main>
 
     <!-- Template Dialog -->
