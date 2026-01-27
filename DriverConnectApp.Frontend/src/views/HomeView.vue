@@ -83,7 +83,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8">
+    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8 flex flex-col">
       <!-- Team Info Banner -->
       <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-blue-700 text-sm">
@@ -101,10 +101,10 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden min-h-0">
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col min-h-0">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -201,7 +201,7 @@
           </div>
   
           <!-- Conversations List -->
-          <div class="overflow-y-auto h-[600px]">
+          <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
             <!-- ... rest of your conversations list remains the same ... -->
             <div v-if="loading" class="p-4 text-center text-gray-500">Loading conversations...</div>
             <div v-else-if="!conversations || conversations.length === 0" class="p-4 text-center text-gray-500">
@@ -457,8 +457,9 @@
             <!-- Messages Area -->
             <div 
               ref="chatContainer" 
-              class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-green-50 min-h-0"
+              class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-green-50"
               @scroll="handleScroll"
+              style="max-height: calc(100vh - 400px);"
             >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
@@ -4244,27 +4245,28 @@ button {
 
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+  scrollbar-color: #cbd5e0 #f1f5f9;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
+  background: #f1f5f9;
+  border-radius: 4px;
+  margin: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 20px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: #cbd5e0;
+  border-radius: 4px;
+  border: 2px solid #f1f5f9;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.2);
+  background: #94a3b8;
 }
 
 /* Fix for Firefox */
@@ -4275,12 +4277,32 @@ button {
 
 /* Ensure parent containers don't overflow */
 .flex-col {
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.min-h-0 {
+  min-height: 0 !important;
+}
+
+.bg-gray-50 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Fix for the chat messages area */
+.bg-green-50 {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Scroll-to-bottom button animation */
 .scroll-to-bottom-button {
   animation: slideInUp 0.3s ease-out;
+  position: absolute;
+  right: 24px;
+  bottom: 100px;
 }
 
 @keyframes slideInUp {
