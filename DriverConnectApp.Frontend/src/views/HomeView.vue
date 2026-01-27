@@ -101,7 +101,7 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex h-[calc(100vh-200px)] max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden">
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden min-h-0">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
         <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
@@ -249,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-white min-h-0">
+        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -260,9 +260,9 @@
               <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
             </p>
           </div>
-          <div v-else class="flex-1 flex flex-col">
+          <div class="flex-shrink-0">
             <!-- Chat Header -->
-            <div class="bg-gray-50 border-b border-gray-200 px-4 py-3 flex-shrink-0">
+            <div class="bg-white border-b border-gray-200 px-4 py-3">
               <div class="flex items-center justify-between">
     
               <!-- Left: Contact Info -->
@@ -454,7 +454,7 @@
             </div>
 
             <!-- Messages Area -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -824,7 +824,7 @@
             
             
             <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t flex-shrink-0">
+            <div class="bg-white px-6 py-4 border-t">
               <div class="flex space-x-4 items-start">
                 <!-- Media Toggle Button -->
                 <button 
