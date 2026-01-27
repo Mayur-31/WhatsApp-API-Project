@@ -101,7 +101,7 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex h-[calc(100%-80px)] max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden">
+      <div class="flex h-[calc(100vh-200px)] max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
         <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
@@ -249,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-white">
+        <div class="flex-1 flex flex-col bg-white min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
