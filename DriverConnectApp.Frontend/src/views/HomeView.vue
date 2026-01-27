@@ -108,12 +108,35 @@
               <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
               <!-- Search Box - NEW -->
               <div class="relative mb-4">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="Search contacts or numbers..."
-                  class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div class="flex items-center">
+                  <svg class="w-5 h-5 text-gray-400 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                  <input
+                    v-model="searchQuery"
+                    type="text"
+                    placeholder="Search contacts or numbers..."
+                    class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <!-- Clear button -->
+                  <button 
+                    v-if="searchQuery" 
+                    @click="searchQuery = ''" 
+                    class="absolute right-3 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+                <!-- Search results info -->
+                <div v-if="searchQuery && filteredConversations.length > 0" class="text-xs text-blue-600 mt-1 ml-1">
+                  Found {{ filteredConversations.length }} result(s) for "{{ searchQuery }}"
+                </div>
+                <div v-if="searchQuery && filteredConversations.length === 0" class="text-xs text-gray-500 mt-1 ml-1">
+                  No conversations found for "{{ searchQuery }}"
+                </div>
+              
                 <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
@@ -165,7 +188,7 @@
             </div>
             <div v-else>
               <div
-                v-for="conv in conversations"
+                v-for="conv in filteredConversations"
                 :key="conv.Id"
                 @click="selectConversation(conv)"
                 :class="['p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors', 
@@ -1746,28 +1769,29 @@ const isValidContact = computed(() => {
 
 // Update filteredConversations computed property
 const filteredConversations = computed(() => {
-  let filtered = conversations.value;
-
-  // Apply search filter
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase();
-    filtered = filtered.filter(conv => 
-      conv.DriverName?.toLowerCase().includes(query) ||
-      conv.DriverPhone?.includes(query) ||
-      conv.PhoneNumber?.includes(query)
-    );
+  // If no search query, return all conversations
+  if (!searchQuery.value.trim()) {
+    return conversations.value;
   }
 
-  // Apply other filters
-  if (showUnansweredOnly.value) {
-    filtered = filtered.filter(c => !c.IsAnswered);
-  }
-
-  if (showGroupsOnly.value) {
-    filtered = filtered.filter(c => c.IsGroupConversation);
-  }
-
-  return filtered;
+  const query = searchQuery.value.toLowerCase();
+  
+  return conversations.value.filter(conv => {
+    // Search by driver/contact name
+    const nameMatch = conv.DriverName?.toLowerCase().includes(query) || false;
+    
+    // Search by phone number
+    const phoneMatch = conv.DriverPhone?.includes(query) || 
+                      conv.PhoneNumber?.includes(query) || false;
+    
+    // Search by group name (if group conversation)
+    const groupNameMatch = conv.GroupName?.toLowerCase().includes(query) || false;
+    
+    // Search by WhatsApp ID
+    const groupIdMatch = conv.WhatsAppGroupId?.toLowerCase().includes(query) || false;
+    
+    return nameMatch || phoneMatch || groupNameMatch || groupIdMatch;
+  });
 });
 
 // NEW: 24-hour window methods
