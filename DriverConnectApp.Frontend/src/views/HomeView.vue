@@ -83,9 +83,9 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8">
       <!-- Team Info Banner -->
-      <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg">
+      <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-blue-700 text-sm">
           📋 Viewing conversations for: <strong>{{ selectedTeam.name }}</strong>
           <span v-if="selectedTeam.whatsAppPhoneNumber" class="ml-2">
@@ -93,17 +93,18 @@
           </span>
         </p>
       </div>
-      
-      <div v-else-if="userTeam" class="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg">
+  
+      <div v-else-if="userTeam" class="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-green-700 text-sm">
           👥 You are viewing your team: <strong>{{ userTeam.name }}</strong>
         </p>
       </div>
-      
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  
+      <!-- UPDATED: Full-width Flex Layout -->
+      <div class="flex h-[calc(100%-80px)] max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="lg:col-span-1 bg-white rounded-lg shadow-lg overflow-hidden">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -248,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="lg:col-span-2 bg-white rounded-lg shadow-lg overflow-hidden">
+        <div class="flex-1 flex flex-col bg-white">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -261,124 +262,195 @@
           </div>
           <div v-else class="h-[600px] flex flex-col">
             <!-- Chat Header -->
-            <div class="bg-green-100 px-6 py-4 border-b">
+            <div class="bg-gray-50 border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <div class="flex items-center justify-between">
-                <!-- LEFT SIDE: Contact Info -->
-                <div class="flex items-center space-x-3">
-                  <div :class="['w-3 h-3 rounded-full', selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']"></div>
-                  <div>
-                    <div class="flex items-center space-x-2">
-                      <h2 class="text-lg font-semibold text-gray-800">{{ selectedConversation.DriverName }}</h2>
-                        <span v-if="selectedConversation.IsGroupConversation" class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Group</span>
-          
-                        <!-- Template button for non-group conversations -->
-                        <button 
-                          v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
-                          @click="openTemplateDialog"
-                          class="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded flex items-center space-x-1"
-                          title="Send template message"
-                        >
-                          <span>📋</span>
-                          <span>Template</span>
-                        </button>
-          
-                        <button 
-                          v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
-                          @click="showGroupManagementModal = true"
-                          class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded flex items-center space-x-1"
-                          title="Manage group"
-                        >
-                          <span>👥</span>
-                          <span>Manage</span>
-                        </button>
-                      </div>
-        
-                      <p class="text-sm text-gray-600">{{ selectedConversation.DriverPhone }}</p>
-        
-                      <!-- ✅ NEW: 24-Hour Window Status Indicator -->
-                      <div v-if="!selectedConversation.IsGroupConversation" class="mt-2 flex items-center space-x-2">
-                        <div v-if="selectedConversation.canSendNonTemplateMessages" 
-                              class="flex items-center space-x-2 px-3 py-1 bg-green-100 border border-green-300 rounded-full">
-                          <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                          <span class="text-xs font-semibold text-green-700">
-                            ✅ Free Text: {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
-                          </span>
-                        </div>
-          
-                        <div v-else 
-                            class="flex items-center space-x-2 px-3 py-1 bg-yellow-100 border border-yellow-300 rounded-full">
-                          <svg class="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                          </svg>
-                          <span class="text-xs font-semibold text-yellow-700">
-                            ⚠️ Templates Only (Window Expired)
-                          </span>
-                        </div>
-                      </div>
-        
-                      <div class="flex items-center space-x-2 mt-2">
-                        <p v-if="selectedConversation.DepartmentName" class="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Dept: {{ selectedConversation.DepartmentName }}</p>
-                        <p class="text-xs text-gray-500">ID: {{ selectedConversation.Id }}</p>
-                        <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                            👥 {{ selectedConversation.Participants?.length || 0 }} members
-                        </p>
-                        <p v-if="selectedConversation.IsGroupConversation && selectedConversation.GroupId" class="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded">
-                          Group ID: {{ selectedConversation.GroupId }}
-                        </p>
-                      </div>
-                    </div>
+    
+              <!-- Left: Contact Info -->
+              <div class="flex items-center space-x-3 flex-1 min-w-0">
+                <!-- Online Status Indicator -->
+                <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', 
+                              selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']">
+                </div>
+      
+                <!-- Avatar -->
+                <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-sm">
+                  {{ getInitials(selectedConversation.DriverName) }}
+                </div>
+      
+                <!-- Contact Details -->
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center space-x-2">
+                    <h2 class="font-semibold text-gray-900 truncate text-base">
+                      {{ selectedConversation.DriverName }}
+                    </h2>
+                    <span v-if="selectedConversation.IsGroupConversation" 
+                          class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex-shrink-0 font-medium">
+                      👥 Group
+                    </span>
                   </div>
-                  <!-- RIGHT SIDE: Action Buttons - MOVED HERE -->
-                  <div class="flex space-x-2">
-                    <button @click="openMediaGallery" class="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded flex items-center space-x-1">
-                      <span>🖼️</span>
-                      <span>Media</span>
-                    </button>
-
-                    <button @click="deleteCurrentContact" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded flex items-center space-x-1">
-                      <span>🗑️</span>
-                      <span>Delete Contact</span>
-                    </button>
-
-                    <button @click="openAssignModal" class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded flex items-center space-x-1">
-                      <span>👤</span>
-                      <span>Assign</span>
-                    </button>
-
-                    <button @click="toggleAnsweredStatus" class="text-xs px-3 py-2 rounded flex items-center space-x-1 bg-red-500 hover:bg-red-600 text-white">
-                      <span>❌</span>
-                      <span>Mark Unanswered</span>
-                    </button>
-                  </div>
+                  <p class="text-xs text-gray-500 truncate flex items-center space-x-2">
+                    <span>{{ selectedConversation.DriverPhone }}</span>
+                    <span v-if="selectedConversation.DepartmentName" class="flex items-center">
+                      <span class="mx-1">•</span>
+                      <span class="text-blue-600">{{ selectedConversation.DepartmentName }}</span>
+                    </span>
+                    <span v-if="selectedConversation.IsGroupConversation" class="flex items-center">
+                      <span class="mx-1">•</span>
+                      <span>{{ selectedConversation.Participants?.length || 0 }} members</span>
+                    </span>
+                  </p>
                 </div>
               </div>
+    
+              <!-- Right: Actions -->
+              <div class="flex items-center space-x-2 flex-shrink-0 action-dropdown-container">
+      
+                <!-- 24-hour Window Status Badge (Hidden on mobile) -->
+                <div v-if="!selectedConversation.IsGroupConversation" class="hidden sm:block">
+                  <div v-if="selectedConversation.canSendNonTemplateMessages" 
+                        class="flex items-center space-x-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                    <svg class="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-xs font-semibold text-green-700">
+                      {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h 
+                      {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
+                    </span>
+                  </div>
+                  <div v-else 
+                        class="flex items-center space-x-1 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <svg class="w-3.5 h-3.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-xs font-semibold text-yellow-700">Templates Only</span>
+                  </div>
+                </div>
+      
+                <!-- Template Button (for non-groups) -->
+                <button 
+                  v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
+                  @click="openTemplateDialog"
+                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                  title="Send template message"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span class="font-medium">Template</span>
+                </button>
+      
+                <!-- Group Management Button (for groups) -->
+                <button 
+                  v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
+                  @click="showGroupManagementModal = true"
+                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                  title="Manage group"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <span class="font-medium">Manage</span>
+                </button>
+      
+                <!-- Three-Dot Menu -->
+                <div class="relative">
+                  <button 
+                    @click.stop="showActionsDropdown = !showActionsDropdown"
+                    class="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    title="More options"
+                  >
+                    <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+        
+                  <!-- Dropdown Menu -->
+                  <Transition
+                    enter-active-class="transition ease-out duration-100"
+                    enter-from-class="transform opacity-0 scale-95"
+                    enter-to-class="transform opacity-100 scale-100"
+                    leave-active-class="transition ease-in duration-75"
+                    leave-from-class="transform opacity-100 scale-100"
+                    leave-to-class="transform opacity-0 scale-95"
+                  >
+                    <div 
+                      v-if="showActionsDropdown"
+                      class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
+                      @click.stop
+                    >
+                      <!-- Media -->
+                      <button 
+                        @click="openMediaGallery(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">🖼️</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Media</div>
+                          <div class="text-xs text-gray-500">View shared media</div>
+                        </div>
+                      </button>
             
-            <!-- 24-Hour Window Status Area -->
-            <!-- Warning when only templates allowed -->
-            <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                 class="p-3 bg-yellow-50 border-y border-yellow-200">
-              
-              <p class="text-xs text-yellow-600 mt-1">
-                You can only send template messages because there hasn't been an incoming message from this contact in the last 24 hours.
-              </p>
-              <button @click="openTemplateDialog" 
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center">
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Send Template Message
-              </button>
+                      <!-- Assign -->
+                      <button 
+                        @click="openAssignModal(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">👤</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Assign</div>
+                          <div class="text-xs text-gray-500">Assign to department</div>
+                        </div>
+                      </button>
+            
+                      <!-- Mark Answered/Unanswered -->
+                      <button 
+                        @click="toggleAnsweredStatus(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
+                        <div class="flex-1">
+                          <div class="font-medium">
+                            {{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}
+                          </div>
+                          <div class="text-xs text-gray-500">Change conversation status</div>
+                        </div>
+                      </button>
+            
+                      <!-- Divider -->
+                      <div class="border-t border-gray-100 my-1"></div>
+            
+                      <!-- Delete Contact (Danger Zone) -->
+                      <button 
+                        @click="deleteCurrentContact(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">🗑️</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Delete Contact</div>
+                          <div class="text-xs text-red-500">Permanently remove</div>
+                        </div>
+                      </button>
+                    </div>
+                  </Transition>
+                </div>
+              </div>
             </div>
+          </div>
             
-            <!-- Countdown when window is active -->
-            <div v-else-if="selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                 class="p-3 bg-green-50 border-y border-green-200">
-              
-              <p class="text-xs text-green-600 mt-1">
-                You can send any type of message until the window expires.
-              </p>
+            <!-- 24-Hour Window Warning (Slim Banner) -->
+            <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
+                  class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between">
+              <div class="flex items-center space-x-2 text-sm">
+                <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span class="text-yellow-800 font-medium">24-hour window expired - Only template messages can be sent</span>
+              </div>
+              <button 
+                @click="openTemplateDialog" 
+                class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex-shrink-0">
+                Send Template
+              </button>
             </div>
 
             <!-- Messages Area -->
@@ -1639,6 +1711,8 @@ const authStore = useAuthStore();
 const teams = ref<any[]>([]);
 const selectedTeamId = ref<number>(0);
 const selectedTeam = ref<any>(null);
+const showActionMenu = ref(false);
+const showActionsDropdown = ref(false);
 
 // 24-hour window state
 const showTemplateDialog = ref(false);
@@ -1649,6 +1723,18 @@ const windowStatusPollInterval = ref<number | null>(null);
 
 const searchQuery = ref('');
 
+const closeDropdownOnClickOutside = (event) => {
+  if (!event.target.closest('.action-dropdown-container')) {
+    showActionsDropdown.value = false;
+  }
+};
+
+const getInitials = (name: string): string => {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
 
 // Computed properties
 const isAdmin = computed(() => authStore.isAdmin);
@@ -2296,6 +2382,7 @@ onMounted(async () => {
 
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
+  document.addEventListener('click', closeDropdownOnClickOutside);
 });
 
 // Watch for team changes
@@ -2310,6 +2397,7 @@ onUnmounted(() => {
     clearInterval(windowStatusPollInterval.value);
     windowStatusPollInterval.value = null;
   }
+  document.removeEventListener('click', closeDropdownOnClickOutside);
 });
 
 // Watch for messages changes to preload media
@@ -2702,9 +2790,7 @@ const removeNewParticipant = (index: number) => {
   newParticipants.value.splice(index, 1);
 };
 
-const getInitials = (name: string): string => {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-};
+
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
@@ -3818,17 +3904,16 @@ const scrollToRepliedMessage = async (messageId: number) => {
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+  background: transparent;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Smooth transitions */
@@ -3882,6 +3967,18 @@ const scrollToRepliedMessage = async (messageId: number) => {
 /* Reaction buttons */
 .group:hover .group-hover\:opacity-100 {
   opacity: 1;
+}
+
+.message-container .bg-green-500 {
+  border-radius: 7.5px 7.5px 0 7.5px !important;
+}
+
+.message-container .bg-white {
+  border-radius: 7.5px 7.5px 7.5px 0 !important;
+}
+
+.action-dropdown-container {
+  position: relative;
 }
 
 /* Status icons */
@@ -4041,21 +4138,38 @@ img:hover {
 
 /* Button hover effects */
 button {
-  transition: all 0.2s ease;
+  transition: all 0.15s ease-in-out;
 }
 
-/* Responsive design improvements */
+/* Mobile responsiveness */
 @media (max-width: 768px) {
-  .grid {
-    grid-template-columns: 1fr;
+  /* Full-width sidebar on mobile */
+  .w-\[360px\] {
+    width: 100% !important;
   }
   
-  .lg\\:col-span-1 {
-    grid-column: span 1;
+  /* Hide chat on mobile when sidebar is active */
+  .flex-1.flex-col {
+    display: none;
   }
   
-  .lg\\:col-span-2 {
-    grid-column: span 1;
+  /* Show chat when conversation is selected */
+  .flex-1.flex-col.active {
+    display: flex;
   }
+}
+
+/* Avatar gradient styles */
+.bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+.from-green-400 {
+  --tw-gradient-from: #4ade80;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(74, 222, 128, 0));
+}
+
+.to-green-600 {
+  --tw-gradient-to: #16a34a;
 }
 </style>
