@@ -102,59 +102,14 @@
       
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Conversations List -->
+        <!-- Updated Conversations List Header Section -->
         <div class="lg:col-span-1 bg-white rounded-lg shadow-lg overflow-hidden">
           <div class="bg-green-100 px-4 py-3 border-b">
-            <div class="flex justify-between items-center mb-2">
+            <!-- Main Header Row -->
+            <div class="flex justify-between items-center mb-3">
               <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
-              <!-- Search Box - NEW -->
-              <div class="relative mb-4">
-                <div class="flex items-center">
-                  <svg class="w-5 h-5 text-gray-400 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                  </svg>
-                  <input
-                    v-model="searchQuery"
-                    type="text"
-                    placeholder="Search contacts or numbers..."
-                    class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <!-- Clear button -->
-                  <button 
-                    v-if="searchQuery" 
-                    @click="searchQuery = ''" 
-                    class="absolute right-3 text-gray-400 hover:text-gray-600"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                  </button>
-                </div>
-                <!-- Search results info -->
-                <div v-if="searchQuery && filteredConversations.length > 0" class="text-xs text-blue-600 mt-1 ml-1">
-                  Found {{ filteredConversations.length }} result(s) for "{{ searchQuery }}"
-                </div>
-                <div v-if="searchQuery && filteredConversations.length === 0" class="text-xs text-gray-500 mt-1 ml-1">
-                  No conversations found for "{{ searchQuery }}"
-                </div>
-              
-                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-              </div>
               <div class="flex space-x-2">
-                <button 
-                  @click="toggleUnansweredFilter" 
-                  :class="['text-xs px-2 py-1 rounded', showUnansweredOnly ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700']"
-                >
-                  {{ showUnansweredOnly ? `Unanswered (${unansweredCount})` : 'All' }}
-                </button>
-                <button 
-                  @click="toggleGroupsFilter" 
-                  :class="['text-xs px-2 py-1 rounded flex items-center space-x-1', showGroupsOnly ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700']"
-                >
-                  <span>👥</span>
-                  <span>{{ showGroupsOnly ? 'Groups Only' : 'All Types' }}</span>
-                </button>
+                <!-- Moved buttons to keep them accessible -->
                 <button 
                   v-if="isAdminOrManager"
                   @click="showCreateGroupModal = true" 
@@ -174,14 +129,79 @@
                 </button>
               </div>
             </div>
-            <!-- Conversation Type Stats -->
-            <div class="flex justify-between text-xs text-gray-600">
-              <span>Total: {{ conversations.length }}</span>
-              <span>Groups: {{ groupConversationsCount }}</span>
-              <span>Individuals: {{ individualConversationsCount }}</span>
+    
+            <!-- WhatsApp-style Search Bar -->
+            <div class="mb-3">
+              <div class="relative">
+                <!-- Search Icon -->
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                </div>
+        
+                <!-- Search Input -->
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="Search or start new chat"
+                  class="w-full pl-10 pr-10 py-2.5 bg-gray-100 border-0 rounded-full text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white focus:shadow-md transition-all duration-200"
+                />
+        
+                <!-- Clear Button (only shows when there's text) -->
+                <button 
+                  v-if="searchQuery" 
+                  @click="searchQuery = ''" 
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  title="Clear search"
+                >
+                  <svg class="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+      
+              <!-- Search Results Info -->
+              <div v-if="searchQuery" class="mt-2 px-2">
+                <div v-if="filteredConversations.length > 0" class="text-xs text-blue-600">
+                  Found {{ filteredConversations.length }} result(s) for "{{ searchQuery }}"
+                </div>
+                <div v-else class="text-xs text-gray-500">
+                  No conversations found for "{{ searchQuery }}"
+                </div>
+              </div>
+            </div>
+    
+            <!-- Filter Row -->
+            <div class="flex justify-between items-center mb-2">
+              <div class="flex space-x-1">
+                <button 
+                  @click="toggleUnansweredFilter" 
+                  :class="['text-xs px-3 py-1.5 rounded-full transition-all', showUnansweredOnly ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300']"
+                >
+                  {{ showUnansweredOnly ? `Unanswered (${unansweredCount})` : 'All' }}
+                </button>
+                <button 
+                  @click="toggleGroupsFilter" 
+                  :class="['text-xs px-3 py-1.5 rounded-full transition-all flex items-center space-x-1', showGroupsOnly ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300']"
+                >
+                  <span>👥</span>
+                  <span>{{ showGroupsOnly ? 'Groups' : 'All Types' }}</span>
+                </button>
+              </div>
+      
+              <!-- Stats -->
+              <div class="flex space-x-3 text-xs text-gray-600">
+                <span>Total: {{ conversations.length }}</span>
+                <span>Groups: {{ groupConversationsCount }}</span>
+                <span>Indiv: {{ individualConversationsCount }}</span>
+              </div>
             </div>
           </div>
+  
+          <!-- Conversations List -->
           <div class="overflow-y-auto h-[600px]">
+            <!-- ... rest of your conversations list remains the same ... -->
             <div v-if="loading" class="p-4 text-center text-gray-500">Loading conversations...</div>
             <div v-else-if="!conversations || conversations.length === 0" class="p-4 text-center text-gray-500">
               No conversations found
@@ -195,36 +215,37 @@
                   selectedConversation?.Id === conv.Id ? 'bg-green-50 border-l-4 border-l-green-500' : '', 
                   !conv.IsAnswered ? 'border-l-4 border-l-red-500' : '']"
               >
+                <!-- ... conversation item content remains the same ... -->
                 <div class="flex items-center justify-between">
                   <div class="flex-1">
                     <div class="flex items-center justify-between">
                       <div class="flex items-center space-x-2">
-                        <!-- Group Indicator -->
                         <span v-if="conv.IsGroupConversation" class="text-lg" title="Group Conversation">👥</span>
-                        <h3 class="font-semibold text-gray-900">{{ getConversationDisplayName(conv) }}</h3>
+                          <h3 class="font-semibold text-gray-900">{{ getConversationDisplayName(conv) }}</h3>
                       </div>
                       <span v-if="!conv.IsAnswered" class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">New</span>
                     </div>
-                    
+            
                     <div class="flex items-center space-x-2 mt-1">
                       <p class="text-sm text-gray-600">{{ getConversationSubtitle(conv) }}</p>
                       <span v-if="conv.IsGroupConversation" class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
                         Group
                       </span>
                     </div>
-                    
+            
                     <p v-if="conv.DepartmentName" class="text-xs text-blue-600 mt-1">📂 {{ conv.DepartmentName }}</p>
                     <p class="text-xs text-gray-500 mt-1 truncate">{{ conv.LastMessagePreview || 'No messages' }}</p>
-                    <div class="flex items-center justify-between mt-1">
-                      <span class="text-xs text-gray-400">{{ conv.MessageCount }} messages</span>
-                      <span v-if="conv.UnreadCount > 0" class="text-xs bg-blue-500 text-white px-1 rounded">{{ conv.UnreadCount }}</span>
+                      <div class="flex items-center justify-between mt-1">
+                        <span class="text-xs text-gray-400">{{ conv.MessageCount }} messages</span>
+                        <span v-if="conv.UnreadCount > 0" class="text-xs bg-blue-500 text-white px-1 rounded">{{ conv.UnreadCount }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+          
 
         <!-- Chat Area -->
         <div class="lg:col-span-2 bg-white rounded-lg shadow-lg overflow-hidden">
