@@ -83,7 +83,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8 flex flex-col">
+    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8">
       <!-- Team Info Banner -->
       <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-blue-700 text-sm">
@@ -101,10 +101,10 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden min-h-0">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col min-h-0">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -201,7 +201,7 @@
           </div>
   
           <!-- Conversations List -->
-          <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
+          <div class="overflow-y-auto h-[600px]">
             <!-- ... rest of your conversations list remains the same ... -->
             <div v-if="loading" class="p-4 text-center text-gray-500">Loading conversations...</div>
             <div v-else-if="!conversations || conversations.length === 0" class="p-4 text-center text-gray-500">
@@ -249,7 +249,7 @@
           
 
         <!-- Chat Area -->
-        <div class="relative flex-1 flex flex-col bg-gray-50 h-full min-h-0 overflow-hidden">
+        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -452,15 +452,9 @@
                 Send Template
               </button>
             </div>
-            <!-- Messages Container - Only this area scrolls -->
-            <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
+
             <!-- Messages Area -->
-            <div 
-              ref="chatContainer" 
-              class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-green-50"
-              @scroll="handleScroll"
-              style="max-height: calc(100vh - 400px);"
-            >
+            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -474,7 +468,6 @@
                 </p>
               </div>
               <div v-else>
-
                 <div 
                   v-for="(message, index) in messages" 
                   :key="message.Id"
@@ -749,24 +742,7 @@
                   </div>
                 </div>
               </div>
-              <!-- Scroll to bottom button - FIXED: Absolute positioning -->
-              <div 
-                v-if="showScrollToBottom" 
-                class="sticky bottom-4 w-full flex justify-center pointer-events-none"
-              >
-              <button 
-                v-if="showScrollToBottom" 
-                @click="scrollToBottom"
-                class="absolute bottom-24 right-6 bg-green-600 hover:bg-green-700 text-white p-3 rounded-full shadow-lg transition-all duration-300 z-40 flex items-center justify-center scroll-to-bottom-button"
-                title="Scroll to latest messages"
-              >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-              </button>
             </div>
-          </div>
-        </div>
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
             <div 
@@ -1738,9 +1714,6 @@ const selectedTeam = ref<any>(null);
 const showActionMenu = ref(false);
 const showActionsDropdown = ref(false);
 
-const showScrollToBottom = ref(false);
-const isScrolledToBottom = ref(true);
-
 // 24-hour window state
 const showTemplateDialog = ref(false);
 const templatePhoneNumber = ref('');
@@ -1749,33 +1722,6 @@ const windowStatusPollInterval = ref<number | null>(null);
 // ✅ NEW: Window status polling interval
 
 const searchQuery = ref('');
-
-const handleScroll = () => {
-  if (!chatContainer.value) return;
-  
-  const container = chatContainer.value;
-  const scrollPosition = container.scrollTop;
-  const containerHeight = container.clientHeight;
-  const scrollHeight = container.scrollHeight;
-  
-  // Calculate distance from bottom (in pixels)
-  const distanceFromBottom = scrollHeight - scrollPosition - containerHeight;
-  
-  // WhatsApp behavior: Show button when > 200px from bottom
-  isScrolledToBottom.value = distanceFromBottom < 100;
-  showScrollToBottom.value = distanceFromBottom > 200;
-};
-
-// Scroll to bottom and hide button
-const scrollToBottom = async () => {
-  await nextTick();
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-    showScrollToBottom.value = false;
-    isScrolledToBottom.value = true;
-  }
-};
-
 
 const closeDropdownOnClickOutside = (event) => {
   if (!event.target.closest('.action-dropdown-container')) {
@@ -2461,27 +2407,6 @@ watch(messages, (newMessages) => {
     preloadMedia();
   }
 }, { deep: true });
-
-watch(messages, async (newMessages, oldMessages) => {
-  await nextTick();
-  
-  // Only auto-scroll if user is currently at the bottom
-  if (isScrolledToBottom.value && newMessages.length > 0) {
-    // Check if there are actually new messages (not just reordered)
-    const oldLastId = oldMessages?.[oldMessages.length - 1]?.Id;
-    const newLastId = newMessages[newMessages.length - 1]?.Id;
-    
-    if (!oldLastId || newLastId !== oldLastId) {
-      await scrollToBottom();
-    }
-  }
-}, { deep: true });
-
-// Reset scroll state when switching conversations
-watch(() => selectedConversation.value?.Id, () => {
-  showScrollToBottom.value = false;
-  isScrolledToBottom.value = true;
-});
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3387,7 +3312,12 @@ const saveAssignment = async () => {
   }
 };
 
-
+const scrollToBottom = async () => {
+  await nextTick();
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+  }
+};
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
   if (index === 0) return true;
@@ -4242,78 +4172,4 @@ button {
 .to-green-600 {
   --tw-gradient-to: #16a34a;
 }
-
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e0 #f1f5f9;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-  margin: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
-  border-radius: 4px;
-  border: 2px solid #f1f5f9;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Fix for Firefox */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
-}
-
-/* Ensure parent containers don't overflow */
-.flex-col {
-  display: flex;
-  flex-direction: column;
-}
-
-.min-h-0 {
-  min-height: 0 !important;
-}
-
-.bg-gray-50 {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-/* Fix for the chat messages area */
-.bg-green-50 {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Scroll-to-bottom button animation */
-.scroll-to-bottom-button {
-  animation: slideInUp 0.3s ease-out;
-  position: absolute;
-  right: 24px;
-  bottom: 100px;
-}
-
-@keyframes slideInUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
 </style>
