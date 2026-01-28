@@ -100,15 +100,17 @@
         </p>
       </div>
   
-      <!-- UPDATED: Full-width Flex Layout with fixed height -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
+      <!-- UPDATED: Full-width Flex Layout -->
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden min-h-0">
         <!-- Conversations List -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
-          <div class="bg-green-100 px-4 py-3 border-b flex-shrink-0">
+        <!-- Updated Conversations List Header Section -->
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+          <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
               <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
               <div class="flex space-x-2">
+                <!-- Moved buttons to keep them accessible -->
                 <button 
                   v-if="isAdminOrManager"
                   @click="showCreateGroupModal = true" 
@@ -117,6 +119,7 @@
                   <span>➕</span>
                   <span>New Group</span>
                 </button>
+                <!-- NEW: Add Contact Button -->
                 <button 
                   v-if="isAdminOrManager"
                   @click="showCreateContactModal = true" 
@@ -131,12 +134,14 @@
             <!-- WhatsApp-style Search Bar -->
             <div class="mb-3">
               <div class="relative">
+                <!-- Search Icon -->
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                   </svg>
                 </div>
         
+                <!-- Search Input -->
                 <input
                   v-model="searchQuery"
                   type="text"
@@ -144,6 +149,7 @@
                   class="w-full pl-10 pr-10 py-2.5 bg-gray-100 border-0 rounded-full text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white focus:shadow-md transition-all duration-200"
                 />
         
+                <!-- Clear Button (only shows when there's text) -->
                 <button 
                   v-if="searchQuery" 
                   @click="searchQuery = ''" 
@@ -156,6 +162,7 @@
                 </button>
               </div>
       
+              <!-- Search Results Info -->
               <div v-if="searchQuery" class="mt-2 px-2">
                 <div v-if="filteredConversations.length > 0" class="text-xs text-blue-600">
                   Found {{ filteredConversations.length }} result(s) for "{{ searchQuery }}"
@@ -184,6 +191,7 @@
                 </button>
               </div>
       
+              <!-- Stats -->
               <div class="flex space-x-3 text-xs text-gray-600">
                 <span>Total: {{ conversations.length }}</span>
                 <span>Groups: {{ groupConversationsCount }}</span>
@@ -192,8 +200,9 @@
             </div>
           </div>
   
-          <!-- Conversations List with internal scroll -->
-          <div class="flex-1 overflow-y-auto whatsapp-scrollbar">
+          <!-- Conversations List -->
+          <div class="overflow-y-auto h-[600px]">
+            <!-- ... rest of your conversations list remains the same ... -->
             <div v-if="loading" class="p-4 text-center text-gray-500">Loading conversations...</div>
             <div v-else-if="!conversations || conversations.length === 0" class="p-4 text-center text-gray-500">
               No conversations found
@@ -207,12 +216,13 @@
                   selectedConversation?.Id === conv.Id ? 'bg-green-50 border-l-4 border-l-green-500' : '', 
                   !conv.IsAnswered ? 'border-l-4 border-l-red-500' : '']"
               >
+                <!-- ... conversation item content remains the same ... -->
                 <div class="flex items-center justify-between">
                   <div class="flex-1">
                     <div class="flex items-center justify-between">
                       <div class="flex items-center space-x-2">
                         <span v-if="conv.IsGroupConversation" class="text-lg" title="Group Conversation">👥</span>
-                        <h3 class="font-semibold text-gray-900">{{ getConversationDisplayName(conv) }}</h3>
+                          <h3 class="font-semibold text-gray-900">{{ getConversationDisplayName(conv) }}</h3>
                       </div>
                       <span v-if="!conv.IsAnswered" class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">New</span>
                     </div>
@@ -226,414 +236,663 @@
             
                     <p v-if="conv.DepartmentName" class="text-xs text-blue-600 mt-1">📂 {{ conv.DepartmentName }}</p>
                     <p class="text-xs text-gray-500 mt-1 truncate">{{ conv.LastMessagePreview || 'No messages' }}</p>
-                    <div class="flex items-center justify-between mt-1">
-                      <span class="text-xs text-gray-400">{{ conv.MessageCount }} messages</span>
-                      <span v-if="conv.UnreadCount > 0" class="text-xs bg-blue-500 text-white px-1 rounded">{{ conv.UnreadCount }}</span>
+                      <div class="flex items-center justify-between mt-1">
+                        <span class="text-xs text-gray-400">{{ conv.MessageCount }} messages</span>
+                        <span v-if="conv.UnreadCount > 0" class="text-xs bg-blue-500 text-white px-1 rounded">{{ conv.UnreadCount }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>  
+          
 
-        <!-- Chat Area with fixed structure -->
-        <div class="flex-1 flex flex-col bg-gray-50 h-full relative">
-          <div 
-            v-if="!selectedConversation" 
-            class="flex-1 flex items-center justify-center bg-green-50 text-gray-500 p-8 text-center"
-          >
-            <div>
-              <div class="text-6xl mb-4">💬</div>
-              <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
-              <p class="text-center">Select a conversation from the list to start chatting</p>
-              <p class="text-sm mt-2 text-gray-400">
-                Use filters to find specific conversations
-                <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
-                <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
-              </p>
-            </div>
-          </div>  
-            
-          <div v-else class="flex-1 flex flex-col h-full min-h-0">
-            <!-- Fixed Header Area -->
-            <div class="flex-shrink-0">
-              <!-- Chat Header -->
-              <div class="bg-white border-b border-gray-200 px-4 py-3">
-                <div class="flex items-center justify-between">
+        <!-- Chat Area -->
+        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
+          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
+            <div class="text-6xl mb-4">💬</div>
+            <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
+            <p class="text-center">Select a conversation from the list to start chatting</p>
+            <p class="text-sm mt-2 text-gray-400">
+              Use filters to find specific conversations
+              <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
+              <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
+            </p>
+          </div>
+          <div class="flex-shrink-0">
+            <!-- Chat Header -->
+            <div class="bg-white border-b border-gray-200 px-4 py-3">
+              <div class="flex items-center justify-between">
     
-                  <!-- Left: Contact Info -->
-                  <div class="flex items-center space-x-3 flex-1 min-w-0">
-                    <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', 
-                                    selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']">
-                    </div>
+              <!-- Left: Contact Info -->
+              <div class="flex items-center space-x-3 flex-1 min-w-0">
+                <!-- Online Status Indicator -->
+                <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', 
+                              selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']">
+                </div>
       
-                    <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-sm">
-                      {{ getInitials(selectedConversation.DriverName) }}
-                    </div>
+                <!-- Avatar -->
+                <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-sm">
+                  {{ getInitials(selectedConversation.DriverName) }}
+                </div>
       
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center space-x-2">
-                        <h2 class="font-semibold text-gray-900 truncate text-base">
-                          {{ selectedConversation.DriverName }}
-                        </h2>
-                        <span v-if="selectedConversation.IsGroupConversation" 
-                              class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex-shrink-0 font-medium">
-                          👥 Group
-                        </span>
-                      </div>
-                      <p class="text-xs text-gray-500 truncate flex items-center space-x-2">
-                        <span>{{ selectedConversation.DriverPhone }}</span>
-                        <span v-if="selectedConversation.DepartmentName" class="flex items-center">
-                          <span class="mx-1">•</span>
-                          <span class="text-blue-600">{{ selectedConversation.DepartmentName }}</span>
-                        </span>
-                        <span v-if="selectedConversation.IsGroupConversation" class="flex items-center">
-                          <span class="mx-1">•</span>
-                          <span>{{ selectedConversation.Participants?.length || 0 }} members</span>
-                        </span>
-                      </p>
-                    </div>
+                <!-- Contact Details -->
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center space-x-2">
+                    <h2 class="font-semibold text-gray-900 truncate text-base">
+                      {{ selectedConversation.DriverName }}
+                    </h2>
+                    <span v-if="selectedConversation.IsGroupConversation" 
+                          class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex-shrink-0 font-medium">
+                      👥 Group
+                    </span>
                   </div>
-    
-                  <!-- Right: Actions -->
-                  <div class="flex items-center space-x-2 flex-shrink-0 action-dropdown-container">
-      
-                    <div v-if="!selectedConversation.IsGroupConversation" class="hidden sm:block">
-                      <div v-if="selectedConversation.canSendNonTemplateMessages" 
-                          class="flex items-center space-x-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                        <svg class="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                        </svg>
-                        <span class="text-xs font-semibold text-green-700">
-                          {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h 
-                          {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
-                        </span>
-                      </div>
-                      <div v-else 
-                            class="flex items-center space-x-1 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <svg class="w-3.5 h-3.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                        <span class="text-xs font-semibold text-yellow-700">Templates Only</span>
-                      </div>
-                    </div>
-      
-                    <button 
-                      v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
-                      @click="openTemplateDialog"
-                      class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
-                      title="Send template message"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span class="font-medium">Template</span>
-                    </button>
-      
-                    <button 
-                      v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
-                      @click="showGroupManagementModal = true"
-                      class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                      title="Manage group"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                      <span class="font-medium">Manage</span>
-                    </button>
-      
-                    <div class="relative">
-                      <button 
-                        @click.stop="showActionsDropdown = !showActionsDropdown"
-                        class="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                        title="More options"
-                      >
-                        <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                        </svg>
-                      </button>
-                      
-                      <Transition
-                        enter-active-class="transition ease-out duration-100"
-                        enter-from-class="transform opacity-0 scale-95"
-                        enter-to-class="transform opacity-100 scale-100"
-                        leave-active-class="transition ease-in duration-75"
-                        leave-from-class="transform opacity-100 scale-100"
-                        leave-to-class="transform opacity-0 scale-95"
-                      >
-                        <div 
-                          v-if="showActionsDropdown"
-                          class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
-                          @click.stop
-                        >
-                          <button 
-                            @click="openMediaGallery(); showActionsDropdown = false"
-                            class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                          >
-                            <span class="text-lg">🖼️</span>
-                            <div class="flex-1">
-                              <div class="font-medium">Media</div>
-                              <div class="text-xs text-gray-500">View shared media</div>
-                            </div>
-                          </button>
-            
-                          <button 
-                            @click="openAssignModal(); showActionsDropdown = false"
-                            class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                          >
-                            <span class="text-lg">👤</span>
-                            <div class="flex-1">
-                              <div class="font-medium">Assign</div>
-                              <div class="text-xs text-gray-500">Assign to department</div>
-                            </div>
-                          </button>
-            
-                          <button 
-                            @click="toggleAnsweredStatus(); showActionsDropdown = false"
-                            class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                          >
-                            <span class="text-lg">{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
-                            <div class="flex-1">
-                              <div class="font-medium">
-                                {{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}
-                              </div>
-                              <div class="text-xs text-gray-500">Change conversation status</div>
-                            </div>
-                          </button>
-            
-                          <div class="border-t border-gray-100 my-1"></div>
-            
-                          <button 
-                            @click="deleteCurrentContact(); showActionsDropdown = false"
-                            class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
-                          >
-                            <span class="text-lg">🗑️</span>
-                            <div class="flex-1">
-                              <div class="font-medium">Delete Contact</div>
-                              <div class="text-xs text-red-500">Permanently remove</div>
-                            </div>
-                          </button>
-                        </div>
-                      </Transition>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            
-              <!-- 24-Hour Window Warning -->
-              <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                    class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between flex-shrink-0">
-                <div class="flex items-center space-x-2 text-sm">
-                  <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                  </svg>
-                  <span class="text-yellow-800 font-medium">24-hour window expired - Only template messages can be sent</span>
-                </div>
-
-                <button 
-                  @click="openTemplateDialog" 
-                  class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex-shrink-0">
-                  Send Template
-                </button>
-              </div>
-            </div>
-
-            <!-- CRITICAL: Messages Area with internal scroll and fixed height -->
-            <div 
-              class="flex-1 overflow-y-auto bg-green-50 whatsapp-scrollbar px-6 pt-6 pb-6"
-              ref="chatContainer"
-              @scroll="handleScroll"
-            >
-              <div class="space-y-4">
-                <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
-                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                  Loading messages...
-                </div>
-                <div v-else-if="!messages || messages.length === 0" class="text-center text-gray-500 py-8">
-                  <div class="text-4xl mb-2">💭</div>
-                  <p class="text-lg font-semibold">No messages yet</p>
-                  <p class="text-sm">Start the conversation by sending a message!</p>
-                  <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
-                    This is a group conversation. Messages will be sent to all group members.
+                  <p class="text-xs text-gray-500 truncate flex items-center space-x-2">
+                    <span>{{ selectedConversation.DriverPhone }}</span>
+                    <span v-if="selectedConversation.DepartmentName" class="flex items-center">
+                      <span class="mx-1">•</span>
+                      <span class="text-blue-600">{{ selectedConversation.DepartmentName }}</span>
+                    </span>
+                    <span v-if="selectedConversation.IsGroupConversation" class="flex items-center">
+                      <span class="mx-1">•</span>
+                      <span>{{ selectedConversation.Participants?.length || 0 }} members</span>
+                    </span>
                   </p>
                 </div>
-               
-                <div v-else>
-                  <!-- Messages will be rendered here - keeping your existing message rendering code -->
-                  <!-- I'll show the complete message structure in the next part -->
+              </div>
+    
+              <!-- Right: Actions -->
+              <div class="flex items-center space-x-2 flex-shrink-0 action-dropdown-container">
+      
+                <!-- 24-hour Window Status Badge (Hidden on mobile) -->
+                <div v-if="!selectedConversation.IsGroupConversation" class="hidden sm:block">
+                  <div v-if="selectedConversation.canSendNonTemplateMessages" 
+                        class="flex items-center space-x-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                    <svg class="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-xs font-semibold text-green-700">
+                      {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h 
+                      {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
+                    </span>
+                  </div>
+                  <div v-else 
+                        class="flex items-center space-x-1 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <svg class="w-3.5 h-3.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-xs font-semibold text-yellow-700">Templates Only</span>
+                  </div>
+                </div>
+      
+                <!-- Template Button (for non-groups) -->
+                <button 
+                  v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
+                  @click="openTemplateDialog"
+                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                  title="Send template message"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span class="font-medium">Template</span>
+                </button>
+      
+                <!-- Group Management Button (for groups) -->
+                <button 
+                  v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
+                  @click="showGroupManagementModal = true"
+                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                  title="Manage group"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <span class="font-medium">Manage</span>
+                </button>
+      
+                <!-- Three-Dot Menu -->
+                <div class="relative">
+                  <button 
+                    @click.stop="showActionsDropdown = !showActionsDropdown"
+                    class="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    title="More options"
+                  >
+                    <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+        
+                  <!-- Dropdown Menu -->
+                  <Transition
+                    enter-active-class="transition ease-out duration-100"
+                    enter-from-class="transform opacity-0 scale-95"
+                    enter-to-class="transform opacity-100 scale-100"
+                    leave-active-class="transition ease-in duration-75"
+                    leave-from-class="transform opacity-100 scale-100"
+                    leave-to-class="transform opacity-0 scale-95"
+                  >
+                    <div 
+                      v-if="showActionsDropdown"
+                      class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
+                      @click.stop
+                    >
+                      <!-- Media -->
+                      <button 
+                        @click="openMediaGallery(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">🖼️</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Media</div>
+                          <div class="text-xs text-gray-500">View shared media</div>
+                        </div>
+                      </button>
+            
+                      <!-- Assign -->
+                      <button 
+                        @click="openAssignModal(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">👤</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Assign</div>
+                          <div class="text-xs text-gray-500">Assign to department</div>
+                        </div>
+                      </button>
+            
+                      <!-- Mark Answered/Unanswered -->
+                      <button 
+                        @click="toggleAnsweredStatus(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
+                        <div class="flex-1">
+                          <div class="font-medium">
+                            {{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}
+                          </div>
+                          <div class="text-xs text-gray-500">Change conversation status</div>
+                        </div>
+                      </button>
+            
+                      <!-- Divider -->
+                      <div class="border-t border-gray-100 my-1"></div>
+            
+                      <!-- Delete Contact (Danger Zone) -->
+                      <button 
+                        @click="deleteCurrentContact(); showActionsDropdown = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                      >
+                        <span class="text-lg">🗑️</span>
+                        <div class="flex-1">
+                          <div class="font-medium">Delete Contact</div>
+                          <div class="text-xs text-red-500">Permanently remove</div>
+                        </div>
+                      </button>
+                    </div>
+                  </Transition>
                 </div>
               </div>
-
-              <!-- CRITICAL: WhatsApp-style Floating Scroll to Bottom Button -->
-              <Transition
-                enter-active-class="transition ease-out duration-200"
-                enter-from-class="transform opacity-0 scale-75"
-                enter-to-class="transform opacity-100 scale-100"
-                leave-active-class="transition ease-in duration-150"
-                leave-from-class="transform opacity-100 scale-100"
-                leave-to-class="transform opacity-0 scale-75"
-              >
-                <button
-                  v-if="showScrollBtn"
-                  @click="scrollToBottom"
-                  class="fixed bottom-28 right-8 w-11 h-11 rounded-full bg-white shadow-lg border border-gray-300 flex items-center justify-center z-50 hover:bg-gray-50 transition-all duration-200 hover:scale-110 active:scale-95"
-                  title="Scroll to latest messages"
-                >
-                  <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-                  </svg>
-                </button>
-              </Transition>
+            </div>
+          </div>
+            
+            <!-- 24-Hour Window Warning (Slim Banner) -->
+            <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
+                  class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between">
+              <div class="flex items-center space-x-2 text-sm">
+                <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span class="text-yellow-800 font-medium">24-hour window expired - Only template messages can be sent</span>
+              </div>
+              <button 
+                @click="openTemplateDialog" 
+                class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex-shrink-0">
+                Send Template
+              </button>
             </div>
 
-            <!-- Fixed Bottom Area -->
-            <div class="flex-shrink-0 bg-white border-t">
-              <!-- Reply Context Bar -->
-              <div 
-                v-if="replyingToMessage" 
-                class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
-                @click="scrollToRepliedMessage(replyingToMessage.Id)"
-                :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
-              >
-                <div class="flex items-center space-x-2">
-                  <span class="text-blue-600">↩️</span>
-                  <span class="text-sm text-blue-700">Replying to {{ getEnhancedSenderName(replyingToMessage) }}</span>
-                  <span class="text-xs text-blue-600 truncate max-w-xs">{{ getReplyPreview(replyingToMessage) }}</span>
+            <!-- Messages Area -->
+            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+              <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
+                Loading messages...
+              </div>
+              <div v-else-if="!messages || messages.length === 0" class="text-center text-gray-500 py-8">
+                <div class="text-4xl mb-2">💭</div>
+                <p class="text-lg font-semibold">No messages yet</p>
+                <p class="text-sm">Start the conversation by sending a message!</p>
+                <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
+                  This is a group conversation. Messages will be sent to all group members.
+                </p>
+              </div>
+              <div v-else>
+                <div 
+                  v-for="(message, index) in messages" 
+                  :key="message.Id"
+                  :id="`message-${message.Id}`"
+                  :class="['message-container group', { 'highlighted': highlightedMessageId === message.Id }]"
+                  @contextmenu="openMessageMenu(message, $event)"
+                >
+                  <!-- Date Separator -->
+                  <div v-if="shouldShowDateSeparator(message, index)" class="text-center my-4">
+                    <span class="bg-white px-3 py-1 rounded-full text-xs text-gray-500 border">
+                      {{ message.FormattedDate || formatMessageDate(message.SentAt) }}
+                    </span>
+                  </div>
+                  
+                  <!-- Message -->
+                  <div :class="['flex', message.IsFromDriver ? 'justify-start' : 'justify-end']">
+                    <div :class="['max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow-sm', message.IsFromDriver ? 'bg-white text-gray-800 border border-gray-200' : 'bg-green-500 text-white']">
+                      
+                      <!-- ENHANCED: Sender Info for ALL Group Messages -->
+                      <div v-if="message.IsGroupMessage" class="text-xs font-semibold mb-1 flex items-center space-x-2"
+                          :class="message.IsFromDriver ? 'text-gray-700' : 'text-green-100'">
+                        <span class="text-lg">👤</span>
+                        <span>{{ getEnhancedSenderName(message) }}</span>
+                        <!-- Staff/Driver badge -->
+                        <span v-if="!message.IsFromDriver" class="staff-badge">
+                          Staff
+                        </span>
+                        <span v-else class="driver-badge">
+                          Driver
+                        </span>
+                        <!-- Show actual staff name if available -->
+                        <span v-if="!message.IsFromDriver && message.SentByUserName" class="text-xs opacity-75">
+                          ({{ message.SentByUserName }})
+                        </span>
+                      </div>
+
+                      <!-- Individual message sender info (for non-group staff messages) -->
+                      <div v-else-if="!message.IsFromDriver" 
+                          class="text-xs font-semibold mb-1 text-green-100 flex items-center space-x-2">
+                        <span class="text-lg">👤</span>
+                        <span>{{ message.SentByUserName || 'Staff' }}</span>
+                        <span class="staff-badge">Staff</span>
+                      </div>
+                      
+                      <!-- ENHANCED: Clickable Reply Context with Staff/Driver Info -->
+                      <div 
+                        v-if="message.ReplyToMessageId" 
+                        class="reply-context mb-2 p-2 rounded text-xs cursor-pointer transition-all"
+                        :class="message.IsFromDriver ? 'bg-gray-100 text-gray-600 border-l-4 border-gray-400' : 'bg-green-400 text-white border-l-4 border-green-600'"
+                        @click="scrollToRepliedMessage(message.ReplyToMessageId)"
+                        :title="`Click to view the original message from ${getEnhancedReplySenderName(message)}`"
+                      >
+                        <div class="font-semibold flex items-center space-x-1 mb-1">
+                          <span>↩️</span>
+                          <span>Replying to {{ getEnhancedReplySenderName(message) }}</span>
+                        </div>
+                        <p class="truncate opacity-90">{{ message.ReplyToMessageContent || message.ReplyToMessage?.Content || 'Previous message' }}</p>
+                      </div>
+                      
+                      <!-- Image Message -->
+                      <div v-if="message.MessageType === 'Image'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="imageLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading image...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="imageErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load image</p>
+                            <button 
+                              @click="retryImageLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Image -->
+                          <img 
+                            v-show="!imageLoadingStates[message.Id] && !imageErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            :alt="message.FileName || 'Image'" 
+                            class="max-w-full h-auto rounded-lg mb-2 max-h-64 object-cover cursor-pointer"
+                            @click="openImageModal(getMediaUrl(message.MediaUrl))"
+                            @load="handleImageLoad(message.Id)"
+                            @error="handleImageError(message.Id, $event)"
+                            loading="lazy"
+                            :key="'img-' + message.Id + '-' + imageRetryCount[message.Id]"
+                          />
+                        </div>
+                        
+                        <!-- Image caption -->
+                        <p v-if="message.Content && !isDefaultImageCaption(message.Content)" 
+                          class="text-sm break-words mt-2">
+                          {{ message.Content }}
+                        </p>
+                        
+                        <!-- Image metadata -->
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Image' }}</span>
+                          <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Video Message -->
+                      <div v-else-if="message.MessageType === 'Video'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="videoLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[100px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading video...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="videoErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[100px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load video</p>
+                            <button 
+                              @click="retryVideoLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Video -->
+                          <video 
+                            v-show="!videoLoadingStates[message.Id] && !videoErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            controls 
+                            class="max-w-full h-auto rounded-lg mb-2 max-h-64"
+                            @loadstart="handleVideoLoadStart(message.Id)"
+                            @loadeddata="handleVideoLoad(message.Id)"
+                            @error="handleVideoError(message.Id, $event)"
+                            :key="'video-' + message.Id + '-' + videoRetryCount[message.Id]"
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                        <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Video' }}</span>
+                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Audio Message -->
+                      <div v-else-if="message.MessageType === 'Audio'" class="text-center">
+                        <div class="relative">
+                          <!-- Loading spinner -->
+                          <div v-if="audioLoadingStates[message.Id]" 
+                              class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-50 rounded-lg min-h-[80px]">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                            <span class="ml-2 text-sm">Loading audio...</span>
+                          </div>
+                          
+                          <!-- Error state -->
+                          <div v-if="audioErrors[message.Id]" 
+                              class="bg-red-50 border border-red-200 rounded-lg p-4 text-center min-h-[80px] flex flex-col items-center justify-center">
+                            <div class="text-red-500 text-2xl mb-2">❌</div>
+                            <p class="text-red-600 text-sm mb-2">Failed to load audio</p>
+                            <button 
+                              @click="retryAudioLoad(message)" 
+                              class="mt-2 text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                              Retry
+                            </button>
+                          </div>
+                          
+                          <!-- Audio -->
+                          <audio 
+                            v-show="!audioLoadingStates[message.Id] && !audioErrors[message.Id]"
+                            :src="getMediaUrl(message.MediaUrl)" 
+                            controls 
+                            class="w-full mb-2"
+                            @loadstart="handleAudioLoadStart(message.Id)"
+                            @loadeddata="handleAudioLoad(message.Id)"
+                            @error="handleAudioError(message.Id, $event)"
+                            :key="'audio-' + message.Id + '-' + audioRetryCount[message.Id]"
+                          >
+                            Your browser does not support the audio element.
+                          </audio>
+                        </div>
+                        <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
+                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
+                          <span>{{ message.FileName || 'Audio' }}</span>
+                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Document Message -->
+                      <div v-else-if="message.MessageType === 'Document'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
+                        <div class="text-2xl">📄</div>
+                        <div class="flex-1">
+                          <a :href="getMediaUrl(message.MediaUrl)" 
+                            target="_blank" 
+                            class="font-medium hover:underline block" 
+                            @click.stop
+                            :class="message.IsFromDriver ? 'text-gray-800' : 'text-white'">
+                            {{ message.FileName || 'Document' }}
+                          </a>
+                          <p class="text-xs opacity-75">{{ formatFileSize(message.FileSize) }}</p>
+                          <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
+                        </div>
+                      </div>
+                      
+                      <!-- Location Message -->
+                      <div v-else-if="message.MessageType === 'Location'" class="flex items-center space-x-3 p-2 bg-black bg-opacity-10 rounded">
+                        <div class="text-2xl">📍</div>
+                        <div class="flex-1">
+                          <p class="font-medium">Location Shared</p>
+                          <a v-if="message.Location" 
+                            :href="`https://maps.google.com/?q=${message.Location}`" 
+                            target="_blank" 
+                            class="text-sm opacity-75 hover:underline block"
+                            @click.stop
+                            :class="message.IsFromDriver ? 'text-gray-600' : 'text-green-100'"
+                          >
+                            View on Google Maps
+                          </a>
+                          <p v-if="message.Content" class="text-sm mt-1">{{ message.Content }}</p>
+                        </div>
+                      </div>
+                      
+                      <!-- Text Message -->
+                      <div v-else>
+                        <p class="text-sm break-words">{{ message.Content }}</p>
+                      </div>
+                      
+                      <!-- WhatsApp Message Status & Interactions -->
+                      <div class="flex items-center justify-between mt-1">
+                        <div class="flex items-center space-x-1">
+                          <!-- Quick Reactions -->
+                          <button 
+                            v-for="reaction in commonReactions" 
+                            :key="reaction"
+                            @click="reactToMessage(message, reaction)"
+                            class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-sm hover:scale-125 transform"
+                            :title="`React with ${reaction}`"
+                          >
+                            {{ reaction }}
+                          </button>
+                          
+                          <!-- Existing reply button -->
+                          <button 
+                            v-if="selectedConversation"
+                            @click="startReply(message)"
+                            class="text-xs opacity-70 hover:opacity-100 transition-opacity flex items-center space-x-1"
+                            :class="message.IsFromDriver ? 'text-gray-500' : 'text-green-100'"
+                          >
+                            <span>↩️</span>
+                            <span>Reply</span>
+                          </button>
+                        </div>
+                        
+                        <!-- Message Status and Time -->
+                        <div class="flex items-center space-x-1 text-xs opacity-70">
+                          <span v-if="message.IsStarred" title="Starred">⭐</span>
+                          <span v-if="message.IsPinned" title="Pinned">📌</span>
+                          <span v-if="message.ForwardCount > 0" :title="`Forwarded ${message.ForwardCount} times`">
+                            ↩️{{ message.ForwardCount }}
+                          </span>
+                          <span :title="`Message status: ${message.Status}`">{{ message.StatusIcon }}</span>
+                          <span>{{ message.FormattedTime || formatMessageTime(message.SentAt) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- ENHANCED: Clickable Reply Context Bar -->
+            <div 
+              v-if="replyingToMessage" 
+              class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
+              @click="scrollToRepliedMessage(replyingToMessage.Id)"
+              :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
+            >
+              <div class="flex items-center space-x-2">
+                <span class="text-blue-600">↩️</span>
+                <span class="text-sm text-blue-700">Replying to {{ getEnhancedSenderName(replyingToMessage) }}</span>
+                <span class="text-xs text-blue-600 truncate max-w-xs">{{ getReplyPreview(replyingToMessage) }}</span>
+              </div>
+              <button 
+                @click.stop="cancelReply"
+                class="text-red-500 hover:text-red-700 text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <!-- Upload Progress Section -->
+            <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
+                <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
+              </div>
+              <div class="w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  class="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out" 
+                  :style="{ width: uploadProgress + '%' }"
+                ></div>
+              </div>
+            </div>
+
+            <!-- File Info Section -->
+            <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-green-700">
+                  📎 {{ uploadedFile.name }} ({{ fileInfo }})
+                </span>
                 <button 
-                  @click.stop="cancelReply"
+                  @click="showFileInfo = false; uploadedFile = null" 
                   class="text-red-500 hover:text-red-700 text-lg font-bold"
                 >
                   ×
                 </button>
               </div>
+            </div>
 
-              <!-- Upload Progress -->
-              <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
-                  <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
-                </div>
-                <div class="w-full bg-blue-200 rounded-full h-2">
-                  <div 
-                    class="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out" 
-                    :style="{ width: uploadProgress + '%' }"
-                  ></div>
-                </div>
+            <!-- Enhanced Media Options -->
+            <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t">
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-sm font-medium text-gray-700">Send Media</span>
+                <button 
+                  @click="showFileSizeLimits" 
+                  class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded flex items-center space-x-1"
+                >
+                  <span>📏</span>
+                  <span>Size Limits</span>
+                </button>
               </div>
-
-              <!-- File Info -->
-              <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-green-700">
-                    📎 {{ uploadedFile.name }} ({{ fileInfo }})
-                  </span>
-                  <button 
-                    @click="showFileInfo = false; uploadedFile = null" 
-                    class="text-red-500 hover:text-red-700 text-lg font-bold"
-                  >
-                    ×
-                  </button>
-                </div>
+              <div class="flex flex-wrap gap-2">
+                <button @click="openGallery" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>🖼️</span>
+                  <span>Gallery</span>
+                </button>
+                <button @click="sendLocation" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>📍</span>
+                  <span>Location</span>
+                </button>
+                <button @click="sendDocument" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
+                  <span>📄</span>
+                  <span>Document</span>
+                </button>
               </div>
-
-              <!-- Media Options -->
-              <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t">
-                <div class="flex justify-between items-center mb-3">
-                  <span class="text-sm font-medium text-gray-700">Send Media</span>
-                  <button 
-                    @click="showFileSizeLimits" 
-                    class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded flex items-center space-x-1"
-                  >
-                    <span>📏</span>
-                    <span>Size Limits</span>
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <button @click="openGallery" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>🖼️</span>
-                    <span>Gallery</span>
-                  </button>
-                  <button @click="sendLocation" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>📍</span>
-                    <span>Location</span>
-                  </button>
-                  <button @click="sendDocument" class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-300 transition-colors flex items-center space-x-2">
-                    <span>📄</span>
-                    <span>Document</span>
-                  </button>
-                </div>
-              </div>
+            </div>
             
-              <!-- Message Input -->
-              <div class="bg-white px-6 py-4">
-                <div class="flex items-center space-x-4">
-                  <button 
-                    @click="toggleMediaOptions" 
-                    class="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100"
-                    :disabled="sending || !selectedConversation"
-                    title="Attach media"
+            
+            
+            <!-- Message Input -->
+            <div class="bg-white px-6 py-4 border-t">
+              <div class="flex space-x-4 items-start">
+                <!-- Media Toggle Button -->
+                <button 
+                  @click="toggleMediaOptions" 
+                  class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors flex items-center justify-center"
+                  :disabled="sending || !selectedConversation"
+                >
+                  <span class="text-lg">➕</span>
+                </button>
+                
+                <!-- Message Input Container -->
+                <div class="relative flex-1">
+                  <input 
+                    v-model="newMessage" 
+                    type="text" 
+                    :placeholder="getMessagePlaceholder()" 
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all" 
+                    @keypress.enter="sendMessage" 
+                    :disabled="sending || !selectedConversation" 
+                    :class="getInputClasses()"
+                  />
+                
+                <!-- Disabled overlay for template-only mode -->
+                  <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
+                       class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-5 rounded-lg pointer-events-none">
+                    <div class="bg-white px-3 py-1 rounded shadow-lg border-2 border-yellow-500">
+                      <span class="text-yellow-600 text-sm font-semibold flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Templates Only
+                      </span>
+                    </div>
+                  </div>
+
+
+
+                <button
+                    @click="sendMessage"
+                    :disabled="(!newMessage.trim() && !uploadedFile) || sending || !selectedConversation || (!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation)"
+                    class="absolute right-3 bottom-3 text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                    :title="(!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation) ? 'Use template button to send messages' : ''"
                   >
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                     </svg>
-                  </button>
-                  
-                  <div class="relative flex-1">
-                    <input 
-                      v-model="newMessage" 
-                      type="text" 
-                      :placeholder="getMessagePlaceholder()" 
-                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all" 
-                      @keypress.enter="sendMessage" 
-                      :disabled="sending || !selectedConversation" 
-                      :class="getInputClasses()"
-                    />
-                  
-                    <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                         class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-5 rounded-lg pointer-events-none">
-                      <div class="bg-white px-3 py-1 rounded shadow-lg border-2 border-yellow-500">
-                        <span class="text-yellow-600 text-sm font-semibold flex items-center">
-                          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          Templates Only
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      @click="sendMessage"
-                      :disabled="(!newMessage.trim() && !uploadedFile) || sending || !selectedConversation || (!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation)"
-                      class="absolute right-3 bottom-3 text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
-                      :title="(!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation) ? 'Use template button to send messages' : ''"
-                    >
-                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  <button 
-                    @click="openTemplateDialog"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center"
-                    :title="selectedConversation.IsGroupConversation ? 'Send template to group' : 'Send template message'"
-                  >
-                    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span class="hidden sm:inline">Template</span>
                   </button>
                 </div>
                 
-                <div v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-500 mt-2 text-center">
-                  💡 This message will be sent to all group members
-                </div>
-                
-                <div v-else-if="!selectedConversation.canSendNonTemplateMessages" class="text-xs text-yellow-600 mt-2 text-center">
-                  ⚠️ Regular messages blocked. Use template button to send messages.
-                </div>
+                <!-- Template Button -->
+                <button 
+                  @click="openTemplateDialog"
+                  class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center"
+                  :title="selectedConversation.IsGroupConversation ? 'Send template to group' : 'Send template message'"
+                >
+                  <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span class="hidden sm:inline">Template</span>
+                </button>
+              </div>
+              
+              <div v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-500 mt-2 text-center">
+                💡 This message will be sent to all group members
+              </div>
+              
+              <div v-else-if="!selectedConversation.canSendNonTemplateMessages" class="text-xs text-yellow-600 mt-2 text-center">
+                ⚠️ Regular messages blocked. Use template button to send messages.
               </div>
             </div>
           </div>
@@ -1454,36 +1713,10 @@ const selectedTeamId = ref<number>(0);
 const selectedTeam = ref<any>(null);
 const showActionMenu = ref(false);
 const showActionsDropdown = ref(false);
-const messagesContainer = ref<HTMLElement | null>(null);
-const showScrollToBottom = ref(false);
 
-const scrollThrottle = ref<number | null>(null);
 // 24-hour window state
 const showTemplateDialog = ref(false);
 const templatePhoneNumber = ref('');
-
-const handleMessagesScroll = () => {
-  if (!messagesContainer.value) return;
-  
-  // Throttle scroll events for better performance
-  if (scrollThrottle.value) {
-    clearTimeout(scrollThrottle.value);
-  }
-  
-  scrollThrottle.value = window.setTimeout(() => {
-    const el = messagesContainer.value;
-    if (!el) return;
-    
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    
-    // Show scroll button when user scrolls up (more than 100px from bottom)
-    showScrollToBottom.value = distanceFromBottom > 100;
-    
-    // User is considered "at bottom" when within 20px
-    isAtBottom.value = distanceFromBottom < 20;
-  }, 100);
-};
 
 const windowStatusPollInterval = ref<number | null>(null);
 // ✅ NEW: Window status polling interval
@@ -1550,7 +1783,6 @@ const conversations = ref<ConversationDto[]>([]);
 const selectedConversation = ref<ConversationDetailDto | null>(null);
 const messages = ref<MessageDto[]>([]);
 const newMessage = ref('');
-const isAtBottom = ref(true);
 const chatContainer = ref<HTMLElement | null>(null);
 const showUnansweredOnly = ref(false);
 const showGroupsOnly = ref(false);
@@ -1668,35 +1900,6 @@ const filteredConversations = computed(() => {
     return nameMatch || phoneMatch || groupNameMatch || groupIdMatch;
   });
 });
-
-const handleScroll = () => {
-  if (!chatContainer.value) {
-    console.log('❌ chatContainer is null');
-    return;
-  }
-  
-  const el = chatContainer.value;
-  const scrollHeight = el.scrollHeight;
-  const scrollTop = el.scrollTop;
-  const clientHeight = el.clientHeight;
-  const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-  
-  console.log('📏 Scroll Debug:', {
-    scrollHeight,
-    scrollTop,
-    clientHeight,
-    distanceToBottom,
-    showButton: distanceToBottom > 150
-  });
-  
-  // Show button if user scrolled up more than 150px from bottom
-  showScrollBtn.value = distanceToBottom > 150;
-  
-  // Update whether user is at bottom
-  isUserAtBottom.value = distanceToBottom < 40;
-  
-  console.log('🎯 showScrollBtn:', showScrollBtn.value);
-};
 
 // NEW: 24-hour window methods
 const getInputPlaceholder = () => {
@@ -1934,12 +2137,13 @@ const loadConversations = async () => {
 
 // UPDATED: sendMessage to include 24-hour window check
 const sendMessage = async () => {
-  if ((!newMessage.value.trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
+  if ((! newMessage.value. trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
     return;
   }
 
-  // Check 24-hour window BEFORE sending non-template messages
-  if (!selectedConversation.value.IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
+  // ✅ CRITICAL FIX: Check 24-hour window BEFORE sending non-template messages
+  if (! selectedConversation.value. IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
+    // ✅ Block the message and show error
     alert('❌ Cannot send regular messages outside 24-hour window.\n\nThe 24-hour messaging window only opens when a customer messages you first.\n\nPlease use the Template button to send a message instead.');
     return;
   }
@@ -1949,8 +2153,6 @@ const sendMessage = async () => {
   newMessage.value = '';
 
   try {
-
-    
     // Determine team ID - CRITICAL FIX
     let teamId: number;
     
@@ -2019,7 +2221,7 @@ const sendMessage = async () => {
 
     // ✅ Refresh window status after sending
     await startWindowStatusPolling();
-    await scrollToBottom();
+    
     cancelReply();
     
     await scrollToBottom();
@@ -2096,7 +2298,7 @@ function stopPolling() {
 
 // UPDATED: selectConversation to include window status check
 const selectConversation = async (conversation: ConversationDto) => {
-  if (!conversation.Id) {
+  if (!conversation. Id) {
     alert('Invalid conversation data');
     return;
   }
@@ -2107,7 +2309,7 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     selectedConversation.value = response.data;
     messages.value = Array.isArray(selectedConversation.value.Messages) 
-      ? selectedConversation.value.Messages 
+      ? selectedConversation. value.Messages 
       : [];
     
     console.log(`Loaded ${messages.value.length} messages for conversation ${conversation.Id}`);
@@ -2129,16 +2331,15 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     // Check 24-hour window status for individual conversations
     if (windowStatusPollInterval.value) {
-      clearInterval(windowStatusPollInterval.value);
+      clearInterval(windowStatusPollInterval);
       windowStatusPollInterval.value = null;
     }
 
-    // Start polling window status for individual conversations
-    if (!selectedConversation.value.IsGroupConversation) {
+    // ✅ Start polling window status for individual conversations
+    if (! selectedConversation.value.IsGroupConversation) {
       startWindowStatusPolling();
     }
     
-    // Scroll to bottom after loading messages
     await scrollToBottom();
   } catch (error: any) {
     alert(`Failed to load conversation: ${error.response?.data?.message || error.message}`);
@@ -2162,7 +2363,6 @@ const openTemplateDialog = () => {
 
 // Lifecycle - UPDATED: Load teams on mount
 onMounted(async () => {
-  
   console.log('HomeView mounted - initializing teams and conversations');
   console.log('User roles:', authStore.user?.roles);
   console.log('User team ID:', authStore.user?.teamId);
@@ -2179,29 +2379,11 @@ onMounted(async () => {
     await loadDepartments();
     await loadUsers();
   }
-  if (chatContainer.value) {
-    chatContainer.value.addEventListener('scroll', handleScroll);
-  }
-  nextTick(() => {
-    if (selectedConversation.value) {
-      setTimeout(() => scrollToBottom('auto'), 500);
-    }
-  });
+
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
   document.addEventListener('click', closeDropdownOnClickOutside);
-  window.addEventListener('resize', handleResize);
-
-  
 });
-
-const handleResize = () => {
-  if (isAtBottom.value) {
-    nextTick(() => {
-      scrollToBottom('auto');
-    });
-  }
-};
 
 // Watch for team changes
 watch(selectedTeamId, async (newTeamId) => {
@@ -2215,13 +2397,6 @@ onUnmounted(() => {
     clearInterval(windowStatusPollInterval.value);
     windowStatusPollInterval.value = null;
   }
-  if (chatContainer.value) {
-    chatContainer.value.removeEventListener('scroll', handleScroll);
-  }
-  if (scrollThrottle.value) {
-    clearTimeout(scrollThrottle.value);
-  }
-  window.removeEventListener('resize', handleResize);
   document.removeEventListener('click', closeDropdownOnClickOutside);
 });
 
@@ -2230,23 +2405,8 @@ watch(messages, (newMessages) => {
   if (newMessages && newMessages.length > 0) {
     console.log('Messages updated, preloading media...');
     preloadMedia();
-    
-    // Auto-scroll only if user is at the bottom
-    if (isUserAtBottom.value) {
-      nextTick(() => {
-        chatContainer.value?.scrollTo({
-          top: chatContainer.value.scrollHeight,
-          behavior: 'auto'
-        });
-      });
-    }
   }
 }, { deep: true });
-
-watch(selectedConversation, async () => {
-  await nextTick();
-  scrollToBottom();
-});
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3152,18 +3312,11 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = (behavior: 'auto' | 'smooth' = 'smooth') => {
-  if (!messagesContainer.value) return;
-  
-  const el = messagesContainer.value;
-  el.scrollTo({
-    top: el.scrollHeight,
-    behavior
-  });
-  
-  // Hide the scroll button immediately
-  showScrollToBottom.value = false;
-  isAtBottom.value = true;
+const scrollToBottom = async () => {
+  await nextTick();
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+  }
 };
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
@@ -3745,161 +3898,6 @@ const scrollToRepliedMessage = async (messageId: number) => {
 </script>
 
 <style scoped>
-
-.h-full.overflow-y-auto {
-  scrollbar-width: thin;
-  scrollbar-color: #c1c1c1 transparent;
-}
-
-.h-full.overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
-}
-
-.whatsapp-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.whatsapp-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-  margin: 4px 0;
-}
-
-.whatsapp-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  min-height: 40px;
-}
-
-.whatsapp-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-/* WhatsApp Background Pattern */
-.bg-\[\#efeae2\] {
-  background-color: #efeae2;
-  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23d1d7db' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
-}
-
-/* Message bubble styling */
-.message-container .bg-white {
-  border-radius: 7.5px 7.5px 7.5px 0;
-  position: relative;
-}
-
-.message-container .bg-green-500 {
-  border-radius: 7.5px 7.5px 0 7.5px;
-  position: relative;
-}
-
-/* Add message tail for WhatsApp style */
-.message-container .bg-white::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 8px 8px 0;
-  border-color: transparent #ffffff transparent transparent;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Read ticks styling */
-.read-ticks {
-  font-size: 16px;
-  margin-left: 4px;
-  color: #53bdeb;
-}
-
-/* Date separator */
-.date-separator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 20px 0;
-}
-
-.date-separator span {
-  background-color: rgba(0, 0, 0, 0.1);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  color: #54656f;
-}
-
-.message-container .bg-green-500::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 0 8px 8px;
-  border-color: transparent transparent transparent #10b981;
-}
-
-/* Floating button animations */
-.absolute.bottom-24.right-4 {
-  animation: fadeInUp 0.3s ease-out;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid #d1d5db;
-}
-
-.whatsapp-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-}
-
-.h-full.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-}
-
-.h-full.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 10px;
-  min-height: 40px;
-}
-
-.h-full.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
-
-.bg-gray-100.rounded-full input {
-  font-size: 15px;
-  line-height: 20px;
-}
-
-/* Floating Scroll Button Animation */
-.absolute.bottom-20.right-4 {
-  animation: fadeIn 0.3s ease-out;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.absolute.bottom-20.right-4:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transform: translateY(-2px);
-}
-
-.absolute.bottom-20.right-4:active {
-  transform: translateY(0);
-}
-
 /* Custom scrollbar */
 .overflow-y-auto::-webkit-scrollbar {
   width: 6px;
@@ -3939,45 +3937,11 @@ const scrollToRepliedMessage = async (messageId: number) => {
   transform: translateY(-10px);
 }
 
-
 /* WhatsApp Message Interaction Styles */
-
-.max-w-xs.lg\:max-w-md.px-4.py-2.rounded-lg {
-  border-radius: 7.5px;
-}
-
-.bg-white.rounded-lg {
-  border-radius: 7.5px 7.5px 7.5px 0;
-}
-
-.bg-green-500.rounded-lg {
-  border-radius: 7.5px 7.5px 0 7.5px;
-}
-
-/* Message Container Spacing */
-.space-y-4 > * + * {
-  margin-top: 0.25rem;
-}
-
-/* Message padding in chat area */
-.min-h-full.p-6.space-y-4.pb-32 {
-  padding-bottom: 8rem;
-}
 
 /* Message context menu animations */
 .fixed {
   animation: fadeIn 0.1s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @keyframes fadeIn {
