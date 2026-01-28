@@ -772,7 +772,7 @@
             </div>
             <!-- WhatsApp-style Floating Scroll to Bottom Button -->
             <button
-              v-if="selectedConversation && !isAtBottom && !messagesLoading && messages.length > 0"
+              v-if="true"
               @click="scrollToBottom"
               class="absolute bottom-20 right-4 bg-white hover:bg-gray-100 text-gray-700 p-3 rounded-full shadow-lg border border-gray-300 transition-all duration-300 ease-in-out z-10 hover:scale-105 active:scale-95"
               title="Scroll to latest messages"
@@ -1948,16 +1948,32 @@ const filteredConversations = computed(() => {
 });
 
 const handleScroll = () => {
-  if (!chatContainer.value) return;
+  if (!chatContainer.value) {
+    console.log('❌ chatContainer is null');
+    return;
+  }
   
   const el = chatContainer.value;
-  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  const scrollHeight = el.scrollHeight;
+  const scrollTop = el.scrollTop;
+  const clientHeight = el.clientHeight;
+  const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+  
+  console.log('📏 Scroll Debug:', {
+    scrollHeight,
+    scrollTop,
+    clientHeight,
+    distanceToBottom,
+    showButton: distanceToBottom > 150
+  });
   
   // Show button if user scrolled up more than 150px from bottom
   showScrollBtn.value = distanceToBottom > 150;
   
   // Update whether user is at bottom
   isUserAtBottom.value = distanceToBottom < 40;
+  
+  console.log('🎯 showScrollBtn:', showScrollBtn.value);
 };
 
 // NEW: 24-hour window methods
@@ -3402,7 +3418,7 @@ const scrollToBottom = async () => {
     });
     
     // Hide the button after scrolling
-    showScrollBtn.value = false;
+    showScrollBtn.value = true;
     isUserAtBottom.value = true;
   }
 };
