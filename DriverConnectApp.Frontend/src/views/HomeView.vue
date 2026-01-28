@@ -1830,6 +1830,8 @@ const isUploading = ref(false);
 const uploadStatus = ref('');
 const showFileInfo = ref(false);
 const fileInfo = ref('');
+const showScrollBtn = ref(false);
+const isUserAtBottom = ref(true);
 
 // Media loading states
 const imageLoadingStates = ref<Record<number, boolean>>({});
