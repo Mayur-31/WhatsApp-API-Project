@@ -246,196 +246,205 @@
               </div>
             </div>
           </div>
-          
+        </div>  
 
         <!-- Chat Area -->
         <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
-          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
-            <div class="text-6xl mb-4">💬</div>
-            <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
-            <p class="text-center">Select a conversation from the list to start chatting</p>
-            <p class="text-sm mt-2 text-gray-400">
-              Use filters to find specific conversations
-              <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
-              <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
-            </p>
-          </div>
-          <div class="flex-shrink-0">
-            <!-- Chat Header -->
-            <div class="bg-white border-b border-gray-200 px-4 py-3">
-              <div class="flex items-center justify-between">
-    
-              <!-- Left: Contact Info -->
-              <div class="flex items-center space-x-3 flex-1 min-w-0">
-                <!-- Online Status Indicator -->
-                <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', 
-                              selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']">
-                </div>
-      
-                <!-- Avatar -->
-                <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-sm">
-                  {{ getInitials(selectedConversation.DriverName) }}
-                </div>
-      
-                <!-- Contact Details -->
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center space-x-2">
-                    <h2 class="font-semibold text-gray-900 truncate text-base">
-                      {{ selectedConversation.DriverName }}
-                    </h2>
-                    <span v-if="selectedConversation.IsGroupConversation" 
-                          class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex-shrink-0 font-medium">
-                      👥 Group
-                    </span>
-                  </div>
-                  <p class="text-xs text-gray-500 truncate flex items-center space-x-2">
-                    <span>{{ selectedConversation.DriverPhone }}</span>
-                    <span v-if="selectedConversation.DepartmentName" class="flex items-center">
-                      <span class="mx-1">•</span>
-                      <span class="text-blue-600">{{ selectedConversation.DepartmentName }}</span>
-                    </span>
-                    <span v-if="selectedConversation.IsGroupConversation" class="flex items-center">
-                      <span class="mx-1">•</span>
-                      <span>{{ selectedConversation.Participants?.length || 0 }} members</span>
-                    </span>
-                  </p>
-                </div>
+          <div 
+            v-if="!selectedConversation" 
+            class="flex-1 flex items-center justify-center bg-green-50 text-gray-500 p-8 text-center"
+          >
+            <div v-if="!selectedConversation" class="text-gray-500 p-8 text-center">
+              <div class="text-6xl mb-4">💬</div>
+                <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
+                <p class="text-center">Select a conversation from the list to start chatting</p>
+                <p class="text-sm mt-2 text-gray-400">
+                    Use filters to find specific conversations
+                  <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
+                  <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
+                </p>
               </div>
+            </div>  
+            
+
+            <div v-else class="flex-1 flex flex-col min-h-0">
+              <!-- Fixed Header Area -->
+              <div class="flex-shrink-0">
+                <!-- Chat Header -->
+                <div class="bg-white border-b border-gray-200 px-4 py-3">
+                  <div class="flex items-center justify-between">
     
-              <!-- Right: Actions -->
-              <div class="flex items-center space-x-2 flex-shrink-0 action-dropdown-container">
+                  <!-- Left: Contact Info -->
+                  <div class="flex items-center space-x-3 flex-1 min-w-0">
+                    <!-- Online Status Indicator -->
+                    <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', 
+                                    selectedConversation.IsAnswered ? 'bg-green-500' : 'bg-red-500']">
+                    </div>
       
-                <!-- 24-hour Window Status Badge (Hidden on mobile) -->
-                <div v-if="!selectedConversation.IsGroupConversation" class="hidden sm:block">
-                  <div v-if="selectedConversation.canSendNonTemplateMessages" 
-                        class="flex items-center space-x-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                    <svg class="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    <span class="text-xs font-semibold text-green-700">
-                      {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h 
-                      {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
-                    </span>
+                  <!-- Avatar -->
+                  <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-sm">
+                      {{ getInitials(selectedConversation.DriverName) }}
                   </div>
-                  <div v-else 
-                        class="flex items-center space-x-1 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <svg class="w-3.5 h-3.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                    </svg>
-                    <span class="text-xs font-semibold text-yellow-700">Templates Only</span>
+      
+                  <!-- Contact Details -->
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center space-x-2">
+                      <h2 class="font-semibold text-gray-900 truncate text-base">
+                        {{ selectedConversation.DriverName }}
+                      </h2>
+                      <span v-if="selectedConversation.IsGroupConversation" 
+                            class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex-shrink-0 font-medium">
+                        👥 Group
+                      </span>
+                    </div>
+                    <p class="text-xs text-gray-500 truncate flex items-center space-x-2">
+                      <span>{{ selectedConversation.DriverPhone }}</span>
+                      <span v-if="selectedConversation.DepartmentName" class="flex items-center">
+                        <span class="mx-1">•</span>
+                        <span class="text-blue-600">{{ selectedConversation.DepartmentName }}</span>
+                      </span>
+                      <span v-if="selectedConversation.IsGroupConversation" class="flex items-center">
+                        <span class="mx-1">•</span>
+                        <span>{{ selectedConversation.Participants?.length || 0 }} members</span>
+                      </span>
+                    </p>
                   </div>
                 </div>
+    
+                <!-- Right: Actions -->
+                <div class="flex items-center space-x-2 flex-shrink-0 action-dropdown-container">
       
-                <!-- Template Button (for non-groups) -->
-                <button 
-                  v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
-                  @click="openTemplateDialog"
-                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
-                  title="Send template message"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span class="font-medium">Template</span>
-                </button>
-      
-                <!-- Group Management Button (for groups) -->
-                <button 
-                  v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
-                  @click="showGroupManagementModal = true"
-                  class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                  title="Manage group"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <span class="font-medium">Manage</span>
-                </button>
-      
-                <!-- Three-Dot Menu -->
-                <div class="relative">
-                  <button 
-                    @click.stop="showActionsDropdown = !showActionsDropdown"
-                    class="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    title="More options"
-                  >
-                    <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                    </svg>
-                  </button>
-        
-                  <!-- Dropdown Menu -->
-                  <Transition
-                    enter-active-class="transition ease-out duration-100"
-                    enter-from-class="transform opacity-0 scale-95"
-                    enter-to-class="transform opacity-100 scale-100"
-                    leave-active-class="transition ease-in duration-75"
-                    leave-from-class="transform opacity-100 scale-100"
-                    leave-to-class="transform opacity-0 scale-95"
-                  >
-                    <div 
-                      v-if="showActionsDropdown"
-                      class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
-                      @click.stop
-                    >
-                      <!-- Media -->
-                      <button 
-                        @click="openMediaGallery(); showActionsDropdown = false"
-                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                      >
-                        <span class="text-lg">🖼️</span>
-                        <div class="flex-1">
-                          <div class="font-medium">Media</div>
-                          <div class="text-xs text-gray-500">View shared media</div>
-                        </div>
-                      </button>
-            
-                      <!-- Assign -->
-                      <button 
-                        @click="openAssignModal(); showActionsDropdown = false"
-                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                      >
-                        <span class="text-lg">👤</span>
-                        <div class="flex-1">
-                          <div class="font-medium">Assign</div>
-                          <div class="text-xs text-gray-500">Assign to department</div>
-                        </div>
-                      </button>
-            
-                      <!-- Mark Answered/Unanswered -->
-                      <button 
-                        @click="toggleAnsweredStatus(); showActionsDropdown = false"
-                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
-                      >
-                        <span class="text-lg">{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
-                        <div class="flex-1">
-                          <div class="font-medium">
-                            {{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}
-                          </div>
-                          <div class="text-xs text-gray-500">Change conversation status</div>
-                        </div>
-                      </button>
-            
-                      <!-- Divider -->
-                      <div class="border-t border-gray-100 my-1"></div>
-            
-                      <!-- Delete Contact (Danger Zone) -->
-                      <button 
-                        @click="deleteCurrentContact(); showActionsDropdown = false"
-                        class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
-                      >
-                        <span class="text-lg">🗑️</span>
-                        <div class="flex-1">
-                          <div class="font-medium">Delete Contact</div>
-                          <div class="text-xs text-red-500">Permanently remove</div>
-                        </div>
-                      </button>
+                  <!-- 24-hour Window Status Badge (Hidden on mobile) -->
+                  <div v-if="!selectedConversation.IsGroupConversation" class="hidden sm:block">
+                    <div v-if="selectedConversation.canSendNonTemplateMessages" 
+                        class="flex items-center space-x-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                      <svg class="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      </svg>
+                      <span class="text-xs font-semibold text-green-700">
+                        {{ Math.floor(selectedConversation.hoursRemaining || 0) }}h 
+                        {{ Math.floor((selectedConversation.minutesRemaining || 0) % 60) }}m
+                      </span>
                     </div>
-                  </Transition>
+                    <div v-else 
+                          class="flex items-center space-x-1 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <svg class="w-3.5 h-3.5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                      </svg>
+                      <span class="text-xs font-semibold text-yellow-700">Templates Only</span>
+                    </div>
+                  </div>
+      
+                  <!-- Template Button (for non-groups) -->
+                  <button 
+                    v-if="!selectedConversation.IsGroupConversation && isAdminOrManager"
+                    @click="openTemplateDialog"
+                    class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                    title="Send template message"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="font-medium">Template</span>
+                  </button>
+      
+                  <!-- Group Management Button (for groups) -->
+                  <button 
+                    v-if="selectedConversation.IsGroupConversation && isAdminOrManager"
+                    @click="showGroupManagementModal = true"
+                    class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                    title="Manage group"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span class="font-medium">Manage</span>
+                  </button>
+      
+                  <!-- Three-Dot Menu -->
+                  <div class="relative">
+                    <button 
+                      @click.stop="showActionsDropdown = !showActionsDropdown"
+                      class="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                      title="More options"
+                    >
+                      <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                      </svg>
+                    </button>
+        
+                    <!-- Dropdown Menu -->
+                    <Transition
+                      enter-active-class="transition ease-out duration-100"
+                      enter-from-class="transform opacity-0 scale-95"
+                      enter-to-class="transform opacity-100 scale-100"
+                      leave-active-class="transition ease-in duration-75"
+                      leave-from-class="transform opacity-100 scale-100"
+                      leave-to-class="transform opacity-0 scale-95"
+                    >
+                      <div 
+                        v-if="showActionsDropdown"
+                        class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
+                        @click.stop
+                      >
+                        <!-- Media -->
+                        <button 
+                          @click="openMediaGallery(); showActionsDropdown = false"
+                          class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                        >
+                          <span class="text-lg">🖼️</span>
+                          <div class="flex-1">
+                            <div class="font-medium">Media</div>
+                            <div class="text-xs text-gray-500">View shared media</div>
+                          </div>
+                        </button>
+            
+                        <!-- Assign -->
+                        <button 
+                          @click="openAssignModal(); showActionsDropdown = false"
+                          class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                        >
+                          <span class="text-lg">👤</span>
+                          <div class="flex-1">
+                            <div class="font-medium">Assign</div>
+                            <div class="text-xs text-gray-500">Assign to department</div>
+                          </div>
+                        </button>
+            
+                        <!-- Mark Answered/Unanswered -->
+                        <button 
+                          @click="toggleAnsweredStatus(); showActionsDropdown = false"
+                          class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                        >
+                          <span class="text-lg">{{ selectedConversation.IsAnswered ? '❌' : '✅' }}</span>
+                          <div class="flex-1">
+                            <div class="font-medium">
+                              {{ selectedConversation.IsAnswered ? 'Mark Unanswered' : 'Mark Answered' }}
+                            </div>
+                            <div class="text-xs text-gray-500">Change conversation status</div>
+                          </div>
+                        </button>
+            
+                        <!-- Divider -->
+                        <div class="border-t border-gray-100 my-1"></div>
+            
+                        <!-- Delete Contact (Danger Zone) -->
+                        <button 
+                          @click="deleteCurrentContact(); showActionsDropdown = false"
+                          class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                        >
+                          <span class="text-lg">🗑️</span>
+                          <div class="flex-1">
+                            <div class="font-medium">Delete Contact</div>
+                            <div class="text-xs text-red-500">Permanently remove</div>
+                          </div>
+                        </button>
+                      </div>
+                    </Transition>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
             
             <!-- 24-Hour Window Warning (Slim Banner) -->
             <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
@@ -446,6 +455,7 @@
                 </svg>
                 <span class="text-yellow-800 font-medium">24-hour window expired - Only template messages can be sent</span>
               </div>
+
               <button 
                 @click="openTemplateDialog" 
                 class="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex-shrink-0">
@@ -455,22 +465,25 @@
 
             <!-- Messages Area -->
             <div 
-              class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50 relative" 
+              v-else
+              class="h-full overflow-y-auto"
               ref="chatContainer"
               @scroll="handleScroll"
             >
-              <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                Loading messages...
-              </div>
-              <div v-else-if="!messages || messages.length === 0" class="text-center text-gray-500 py-8">
-                <div class="text-4xl mb-2">💭</div>
-                <p class="text-lg font-semibold">No messages yet</p>
-                <p class="text-sm">Start the conversation by sending a message!</p>
-                <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
-                  This is a group conversation. Messages will be sent to all group members.
-                </p>
-              </div>
+              <div class="min-h-full p-6 space-y-4 pb-32">
+                <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
+                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
+                    Loading messages...
+                </div>
+                <div v-else-if="!messages || messages.length === 0" class="text-center text-gray-500 py-8">
+                  <div class="text-4xl mb-2">💭</div>
+                  <p class="text-lg font-semibold">No messages yet</p>
+                  <p class="text-sm">Start the conversation by sending a message!</p>
+                  <p v-if="selectedConversation.IsGroupConversation" class="text-xs text-gray-400 mt-2">
+                    This is a group conversation. Messages will be sent to all group members.
+                  </p>
+                </div>
+               
               <div v-else>
                 <div 
                   v-for="(message, index) in messages" 
@@ -746,28 +759,21 @@
                   </div>
                 </div>
               </div>
-              <!-- WhatsApp-like Scroll-to-Bottom Button -->
-              <transition 
-                enter-active-class="transition-opacity duration-200"
-                enter-from-class="opacity-0"
-                enter-to-class="opacity-100"
-                leave-active-class="transition-opacity duration-200"
-                leave-from-class="opacity-100"
-                leave-to-class="opacity-0"
-              >
-                <button
-                  v-if="showScrollBtn"
-                  @click="scrollToBottom"
-                  class="scroll-bottom-btn"
-                  title="Scroll to bottom"
-                >
-                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 14.9l-6.4-6.4 1.4-1.4 5 5 5-5 1.4 1.4-6.4 6.4z"></path>
-                  </svg>
-                </button>
-              </transition>
             </div>
-
+            <!-- WhatsApp-style Floating Scroll to Bottom Button -->
+            <button
+              v-if="selectedConversation && !isAtBottom && !messagesLoading && messages.length > 0"
+              @click="scrollToBottom"
+              class="absolute bottom-20 right-4 bg-white hover:bg-gray-100 text-gray-700 p-3 rounded-full shadow-lg border border-gray-300 transition-all duration-300 ease-in-out z-10 hover:scale-105 active:scale-95"
+              title="Scroll to latest messages"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+              </svg>
+            </button>
+          </div>
+          <!-- Fixed Bottom Area -->
+          <div class="flex-shrink-0">
             <!-- ENHANCED: Clickable Reply Context Bar -->
             <div 
               v-if="replyingToMessage" 
@@ -844,19 +850,23 @@
                 </button>
               </div>
             </div>
+          </div>  
             
             
             
             <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t">
-              <div class="flex space-x-4 items-start">
+            <div class="bg-white px-6 py-4 border-t border-gray-300">
+              <div class="flex items-center space-x-4">
                 <!-- Media Toggle Button -->
                 <button 
                   @click="toggleMediaOptions" 
-                  class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors flex items-center justify-center"
+                  class="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100"
                   :disabled="sending || !selectedConversation"
+                  title="Attach media"
                 >
-                  <span class="text-lg">➕</span>
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                  </svg>
                 </button>
                 
                 <!-- Message Input Container -->
@@ -883,7 +893,7 @@
                       </span>
                     </div>
                   </div>
-
+                  
 
 
                 <button
@@ -1807,6 +1817,7 @@ const conversations = ref<ConversationDto[]>([]);
 const selectedConversation = ref<ConversationDetailDto | null>(null);
 const messages = ref<MessageDto[]>([]);
 const newMessage = ref('');
+const isAtBottom = ref(true);
 const chatContainer = ref<HTMLElement | null>(null);
 const showUnansweredOnly = ref(false);
 const showGroupsOnly = ref(false);
@@ -1830,8 +1841,6 @@ const isUploading = ref(false);
 const uploadStatus = ref('');
 const showFileInfo = ref(false);
 const fileInfo = ref('');
-const showScrollBtn = ref(false);
-const isUserAtBottom = ref(true);
 
 // Media loading states
 const imageLoadingStates = ref<Record<number, boolean>>({});
@@ -1926,6 +1935,18 @@ const filteredConversations = computed(() => {
     return nameMatch || phoneMatch || groupNameMatch || groupIdMatch;
   });
 });
+
+const handleScroll = () => {
+  if (!chatContainer.value) return;
+  
+  const container = chatContainer.value;
+  const scrollTop = container.scrollTop;
+  const scrollHeight = container.scrollHeight;
+  const clientHeight = container.clientHeight;
+  
+  // Check if user is at bottom (with 100px threshold)
+  isAtBottom.value = scrollHeight - scrollTop - clientHeight < 100;
+};
 
 // NEW: 24-hour window methods
 const getInputPlaceholder = () => {
@@ -2163,13 +2184,12 @@ const loadConversations = async () => {
 
 // UPDATED: sendMessage to include 24-hour window check
 const sendMessage = async () => {
-  if ((! newMessage.value. trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
+  if ((!newMessage.value.trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
     return;
   }
 
-  // ✅ CRITICAL FIX: Check 24-hour window BEFORE sending non-template messages
-  if (! selectedConversation.value. IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
-    // ✅ Block the message and show error
+  // Check 24-hour window BEFORE sending non-template messages
+  if (!selectedConversation.value.IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
     alert('❌ Cannot send regular messages outside 24-hour window.\n\nThe 24-hour messaging window only opens when a customer messages you first.\n\nPlease use the Template button to send a message instead.');
     return;
   }
@@ -2179,6 +2199,8 @@ const sendMessage = async () => {
   newMessage.value = '';
 
   try {
+
+    
     // Determine team ID - CRITICAL FIX
     let teamId: number;
     
@@ -2247,7 +2269,7 @@ const sendMessage = async () => {
 
     // ✅ Refresh window status after sending
     await startWindowStatusPolling();
-    
+    await scrollToBottom();
     cancelReply();
     
     await scrollToBottom();
@@ -2324,7 +2346,7 @@ function stopPolling() {
 
 // UPDATED: selectConversation to include window status check
 const selectConversation = async (conversation: ConversationDto) => {
-  if (!conversation. Id) {
+  if (!conversation.Id) {
     alert('Invalid conversation data');
     return;
   }
@@ -2335,7 +2357,7 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     selectedConversation.value = response.data;
     messages.value = Array.isArray(selectedConversation.value.Messages) 
-      ? selectedConversation. value.Messages 
+      ? selectedConversation.value.Messages 
       : [];
     
     console.log(`Loaded ${messages.value.length} messages for conversation ${conversation.Id}`);
@@ -2357,15 +2379,16 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     // Check 24-hour window status for individual conversations
     if (windowStatusPollInterval.value) {
-      clearInterval(windowStatusPollInterval);
+      clearInterval(windowStatusPollInterval.value);
       windowStatusPollInterval.value = null;
     }
 
-    // ✅ Start polling window status for individual conversations
-    if (! selectedConversation.value.IsGroupConversation) {
+    // Start polling window status for individual conversations
+    if (!selectedConversation.value.IsGroupConversation) {
       startWindowStatusPolling();
     }
     
+    // Scroll to bottom after loading messages
     await scrollToBottom();
   } catch (error: any) {
     alert(`Failed to load conversation: ${error.response?.data?.message || error.message}`);
@@ -2405,7 +2428,9 @@ onMounted(async () => {
     await loadDepartments();
     await loadUsers();
   }
-
+  if (chatContainer.value) {
+    chatContainer.value.addEventListener('scroll', handleScroll);
+  }
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
   document.addEventListener('click', closeDropdownOnClickOutside);
@@ -2423,23 +2448,24 @@ onUnmounted(() => {
     clearInterval(windowStatusPollInterval.value);
     windowStatusPollInterval.value = null;
   }
+  if (chatContainer.value) {
+    chatContainer.value.removeEventListener('scroll', handleScroll);
+  }
   document.removeEventListener('click', closeDropdownOnClickOutside);
 });
 
 // Watch for messages changes to preload media
-watch(messages, (newMessages) => {
-  if (newMessages && newMessages.length > 0) {
-    console.log('Messages updated, preloading media...');
-    preloadMedia();
-    
-    // Auto-scroll only if user is at the bottom
-    if (isUserAtBottom.value) {
-      nextTick(() => {
-        scrollToBottom(false); // Use instant scroll for new messages
-      });
-    }
+watch(messages, async (newMessages, oldMessages) => {
+  if (newMessages.length > oldMessages.length && isAtBottom.value) {
+    await nextTick();
+    scrollToBottom();
   }
 }, { deep: true });
+
+watch(selectedConversation, async () => {
+  await nextTick();
+  scrollToBottom();
+});
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3345,31 +3371,15 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = async (smooth = true) => {
+const scrollToBottom = async () => {
   await nextTick();
   if (chatContainer.value) {
     chatContainer.value.scrollTo({
       top: chatContainer.value.scrollHeight,
-      behavior: smooth ? 'smooth' : 'auto'
+      behavior: 'smooth'
     });
-    
-    // Hide the button after scrolling
-    showScrollBtn.value = false;
-    isUserAtBottom.value = true;
+    isAtBottom.value = true;
   }
-};
-
-const handleScroll = () => {
-  if (!chatContainer.value) return;
-  
-  const el = chatContainer.value;
-  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-  
-  // Show button if user scrolled up more than 300px from bottom
-  showScrollBtn.value = distanceToBottom > 300;
-  
-  // Update whether user is at bottom
-  isUserAtBottom.value = distanceToBottom < 50;
 };
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
@@ -3882,7 +3892,6 @@ const formatRelativeTime = (dateString: string): string => {
 
 // Enhanced: Reply navigation with WhatsApp-like behavior
 const scrollToRepliedMessage = async (messageId: number) => {
-  showScrollBtn.value = false;
   console.log(`Attempting to scroll to original message: ${messageId}`);
   
   await nextTick();
@@ -3952,23 +3961,68 @@ const scrollToRepliedMessage = async (messageId: number) => {
 </script>
 
 <style scoped>
-/* Custom scrollbar */
-.bg-green-50::-webkit-scrollbar {
+
+.h-full.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 transparent;
+}
+
+.h-full.overflow-y-auto::-webkit-scrollbar {
   width: 6px;
 }
 
-.bg-green-50::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
+.h-full.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.h-full.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+  min-height: 40px;
+}
+
+.h-full.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.bg-gray-100.rounded-full input {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+/* Floating Scroll Button Animation */
+.absolute.bottom-20.right-4 {
+  animation: fadeIn 0.3s ease-out;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.absolute.bottom-20.right-4:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+.absolute.bottom-20.right-4:active {
+  transform: translateY(0);
+}
+
+/* Custom scrollbar */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
 }
 
-.bg-green-50::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.bg-green-50::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Smooth transitions */
@@ -3992,11 +4046,45 @@ const scrollToRepliedMessage = async (messageId: number) => {
   transform: translateY(-10px);
 }
 
+
 /* WhatsApp Message Interaction Styles */
+
+.max-w-xs.lg\:max-w-md.px-4.py-2.rounded-lg {
+  border-radius: 7.5px;
+}
+
+.bg-white.rounded-lg {
+  border-radius: 7.5px 7.5px 7.5px 0;
+}
+
+.bg-green-500.rounded-lg {
+  border-radius: 7.5px 7.5px 0 7.5px;
+}
+
+/* Message Container Spacing */
+.space-y-4 > * + * {
+  margin-top: 0.25rem;
+}
+
+/* Message padding in chat area */
+.min-h-full.p-6.space-y-4.pb-32 {
+  padding-bottom: 8rem;
+}
 
 /* Message context menu animations */
 .fixed {
   animation: fadeIn 0.1s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
@@ -4189,40 +4277,6 @@ img {
 
 img:hover {
   transform: scale(1.02);
-}
-
-/* WhatsApp-like Scroll-to-Bottom Button */
-.scroll-bottom-btn {
-  position: absolute;
-  bottom: 100px; /* Position above message input */
-  right: 30px;
-  width: 40px;
-  height: 40px;
-  background-color: white;
-  border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  color: #54656f;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 99;
-  transition: all 0.2s ease;
-}
-
-.scroll-bottom-btn:hover {
-  background-color: #f8f9fa;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-.scroll-bottom-btn:active {
-  transform: translateY(0);
-}
-
-.relative {
-  position: relative;
 }
 
 /* Button hover effects */
