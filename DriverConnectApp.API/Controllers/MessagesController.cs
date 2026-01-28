@@ -1577,6 +1577,120 @@ namespace DriverConnectApp.API.Controllers
                 await _context.SaveChangesAsync();
             }
         }
+
+        [HttpPost("send-media")]
+        public async Task<IActionResult> SendMediaMessage([FromForm] SendMediaRequest request)
+        {
+            try
+            {
+                if (request.File == null || request.File.Length == 0)
+                    return BadRequest(new { message = "No file provided" });
+
+                // Validate file size and type
+                var maxSize = request.MediaType switch
+                {
+                    "image" => 5 * 1024 * 1024, // 5MB
+                    "video" => 16 * 1024 * 1024, // 16MB
+                    "audio" => 16 * 1024 * 1024, // 16MB
+                    "document" => 100 * 1024 * 1024, // 100MB
+                    _ => 5 * 1024 * 1024
+                };
+
+                if (request.File.Length > maxSize)
+                    return BadRequest(new { message = $"File exceeds size limit of {maxSize / (1024 * 1024)}MB" });
+
+                // Read file bytes
+                using var memoryStream = new MemoryStream();
+                await request.File.CopyToAsync(memoryStream);
+                var fileBytes = memoryStream.ToArray();
+
+                // Determine MessageType from string
+                var messageType = request.MediaType.ToLower() switch
+                {
+                    "image" => MessageType.Image,
+                    "video" => MessageType.Video,
+                    "audio" => MessageType.Audio,
+                    "document" => MessageType.Document,
+                    _ => MessageType.Document
+                };
+
+                // Send via WhatsApp service
+                var result = await _whatsAppService.SendMediaMessageAsync(
+                    request.PhoneNumber,
+                    fileBytes,
+                    request.File.FileName,
+                    request.File.ContentType,
+                    messageType,
+                    request.TeamId,
+                    request.Caption);
+
+                if (result.Success)
+                {
+                    // Save to database
+                    var message = new Message
+                    {
+                        ConversationId = request.ConversationId,
+                        Content = request.Caption ?? $"Sent {request.MediaType}",
+                        MessageType = messageType,
+                        MediaUrl = await SaveMediaLocallyAsync(fileBytes, request.File.FileName, request.File.ContentType),
+                        FileName = request.File.FileName,
+                        FileSize = request.File.Length,
+                        MimeType = request.File.ContentType,
+                        IsFromDriver = false,
+                        SentAt = DateTime.UtcNow,
+                        WhatsAppMessageId = $"sent_{Guid.NewGuid()}",
+                        Status = MessageStatus.Sent
+                    };
+
+                    _context.Messages.Add(message);
+                    await _context.SaveChangesAsync();
+
+                    return Ok(new
+                    {
+                        success = true,
+                        messageId = message.Id,
+                        mediaUrl = message.MediaUrl
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { message = result.ErrorMessage });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending media message");
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
+
+
+        private async Task<string?> SaveMediaLocallyAsync(byte[] fileBytes, string fileName, string mimeType)
+        {
+            try
+            {
+                var uploadsDir = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
+                if (!Directory.Exists(uploadsDir))
+                    Directory.CreateDirectory(uploadsDir);
+
+                // Ensure safe filename
+                var safeFileName = Path.GetFileName(fileName);
+                var fullPath = Path.Combine(uploadsDir, safeFileName);
+
+                // ✅ FIX: Use System.IO.File to avoid conflict with ControllerBase.File
+                await System.IO.File.WriteAllBytesAsync(fullPath, fileBytes);
+
+                var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                return $"{baseUrl}/uploads/{safeFileName}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving media locally");
+                return null;
+            }
+        }
+
         // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
         [HttpPost("send-template")]
         public async Task<IActionResult> SendTemplateMessage([FromBody] SendTemplateByDriverIdRequest request)
@@ -1690,6 +1804,8 @@ namespace DriverConnectApp.API.Controllers
     }
 
 
+
+
     public class CompressionResult
     {
         public long FileSize { get; set; }
@@ -1704,5 +1820,15 @@ namespace DriverConnectApp.API.Controllers
         public string TemplateName { get; set; } = string.Empty;
         public Dictionary<string, string>? TemplateParameters { get; set; }
         public string? LanguageCode { get; set; } = "en_US";
+    }
+
+    public class SendMediaRequest
+    {
+        public IFormFile File { get; set; } = null!;
+        public string PhoneNumber { get; set; } = null!;
+        public int TeamId { get; set; }
+        public int ConversationId { get; set; }
+        public string MediaType { get; set; } = null!; // "image", "video", "audio", "document"
+        public string? Caption { get; set; }
     }
 }

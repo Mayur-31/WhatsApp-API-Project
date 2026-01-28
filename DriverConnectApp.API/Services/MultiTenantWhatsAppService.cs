@@ -27,6 +27,7 @@ namespace DriverConnectApp.API.Services
         private readonly IMessageService _messageService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IWebHostEnvironment _environment;
 
         public MultiTenantWhatsAppService(
             AppDbContext context,
@@ -35,7 +36,8 @@ namespace DriverConnectApp.API.Services
             IConfiguration configuration,
             IMessageService messageService,
             UserManager<ApplicationUser> userManager,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IWebHostEnvironment environment)
         {
             _context = context;
             _logger = logger;
@@ -45,7 +47,188 @@ namespace DriverConnectApp.API.Services
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _environment = environment;
         }
+
+        public class WhatsAppMediaService
+        {
+            private readonly HttpClient _httpClient;
+            private readonly IWebHostEnvironment _environment;
+            private readonly ILogger _logger;
+            private readonly IConfiguration _configuration;
+
+            public WhatsAppMediaService(
+                HttpClient httpClient,
+                IWebHostEnvironment environment,
+                ILogger logger,
+                IConfiguration configuration)
+            {
+                _httpClient = httpClient;
+                _environment = environment;
+                _logger = logger;
+                _configuration = configuration;
+                _httpClient.Timeout = TimeSpan.FromSeconds(60);
+            }
+
+            public async Task<string?> UploadMediaToWhatsAppAsync(
+               byte[] fileBytes,
+               string fileName,
+               string mimeType,
+               string phoneNumberId,
+               string accessToken)
+            {
+                try
+                {
+                    var uploadUrl = $"https://graph.facebook.com/v19.0/{phoneNumberId}/media";
+
+                    using var form = new MultipartFormDataContent();
+                    using var fileContent = new ByteArrayContent(fileBytes);
+
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
+                    form.Add(fileContent, "file", fileName);
+                    form.Add(new StringContent(mimeType), "type");
+                    form.Add(new StringContent("media"), "messaging_product");
+
+                    _httpClient.DefaultRequestHeaders.Authorization =
+                        new AuthenticationHeaderValue("Bearer", accessToken);
+
+                    var response = await _httpClient.PostAsync(uploadUrl, form);
+                    var responseContent = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        using var jsonDoc = JsonDocument.Parse(responseContent);
+                        if (jsonDoc.RootElement.TryGetProperty("id", out var idElement))
+                        {
+                            var mediaId = idElement.GetString();
+                            _logger.LogInformation("✅ Media uploaded to WhatsApp: {MediaId}", mediaId);
+                            return mediaId;
+                        }
+                    }
+
+                    _logger.LogError("❌ Failed to upload media to WhatsApp: {Response}", responseContent);
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error uploading media to WhatsApp");
+                    return null;
+                }
+            }
+
+
+            public async Task<(byte[]? FileBytes, string? MimeType, string? FileName)> DownloadWhatsAppMediaAsync(
+                string mediaId,
+                string accessToken,
+                string? originalFileName = null)
+            {
+                try
+                {
+                    // Step 1: Get media URL from WhatsApp
+                    var mediaUrl = $"https://graph.facebook.com/v19.0/{mediaId}";
+
+                    _httpClient.DefaultRequestHeaders.Authorization =
+                        new AuthenticationHeaderValue("Bearer", accessToken);
+
+                    var response = await _httpClient.GetAsync(mediaUrl);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("Failed to get media URL for {MediaId}: {StatusCode}",
+                            mediaId, response.StatusCode);
+                        return (null, null, null);
+                    }
+
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    using var jsonDoc = JsonDocument.Parse(responseContent);
+
+                    if (!jsonDoc.RootElement.TryGetProperty("url", out var urlElement))
+                    {
+                        _logger.LogError("No URL in media response for {MediaId}", mediaId);
+                        return (null, null, null);
+                    }
+
+                    var downloadUrl = urlElement.GetString();
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        _logger.LogError("Empty download URL for {MediaId}", mediaId);
+                        return (null, null, null);
+                    }
+
+                    // Step 2: Download the actual media file
+                    var mediaResponse = await _httpClient.GetAsync(downloadUrl);
+                    if (!mediaResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("Failed to download media from {DownloadUrl}", downloadUrl);
+                        return (null, null, null);
+                    }
+
+                    var fileBytes = await mediaResponse.Content.ReadAsByteArrayAsync();
+                    var mimeType = mediaResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+                    var fileName = originalFileName ?? $"{Guid.NewGuid()}{GetFileExtension(mimeType)}";
+
+                    _logger.LogInformation("✅ Downloaded WhatsApp media: {FileName} ({Size} bytes)",
+                        fileName, fileBytes.Length);
+
+                    return (fileBytes, mimeType, fileName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error downloading WhatsApp media {MediaId}", mediaId);
+                    return (null, null, null);
+                }
+            }
+
+
+            public async Task<string?> SaveMediaLocallyAsync(
+                byte[] fileBytes,
+                string fileName,
+                string mimeType)
+            {
+                try
+                {
+                    var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads");
+                    if (!Directory.Exists(uploadsDir))
+                        Directory.CreateDirectory(uploadsDir);
+
+                    // Ensure safe filename
+                    var safeFileName = Path.GetFileName(fileName);
+                    var fullPath = Path.Combine(uploadsDir, safeFileName);
+
+                    await File.WriteAllBytesAsync(fullPath, fileBytes);
+
+                    var baseUrl = _configuration["BaseUrl"] ?? "https://onestopvan.work.gd";
+                    return $"{baseUrl}/uploads/{safeFileName}";
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error saving media locally");
+                    return null;
+                }
+            }
+
+            public string GetFileExtension(string mimeType) // ✅ Changed from private to public
+            {
+                return mimeType.ToLower() switch
+                {
+                    "image/jpeg" => ".jpg",
+                    "image/png" => ".png",
+                    "image/gif" => ".gif",
+                    "image/webp" => ".webp",
+                    "video/mp4" => ".mp4",
+                    "video/3gpp" => ".3gp",
+                    "audio/mpeg" => ".mp3",
+                    "audio/aac" => ".aac",
+                    "audio/ogg" => ".ogg",
+                    "application/pdf" => ".pdf",
+                    "application/msword" => ".doc",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+                    "text/plain" => ".txt",
+                    _ => ".bin"
+                };
+            }
+        }
+
+
 
         public async Task<object> SendMessageAsync(SendMessageRequest request, int teamId)
         {
@@ -787,27 +970,52 @@ namespace DriverConnectApp.API.Services
             }
         }
 
-        public async Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
+
+        public async Task<(bool Success, string? ErrorMessage, string? MediaUrl)> SendMediaMessageAsync(
+            string to,
+            byte[] fileBytes,
+            string fileName,
+            string mimeType,
+            MessageType mediaType,
+            int teamId,
+            string? caption = null)
         {
             try
             {
                 var team = await GetTeamById(teamId);
                 if (team == null || !team.IsActive)
+                    return (false, "Team not found or inactive", null);
+
+                // ✅ WhatsApp size limits
+                var fileSizeMB = fileBytes.Length / (1024.0 * 1024.0);
+
+                switch (mediaType)
                 {
-                    _logger.LogError("Team {TeamId} not found or inactive", teamId);
-                    return false;
+                    case MessageType.Video when fileSizeMB > 16:
+                        return (false, "Video size exceeds 16MB limit", null);
+                    case MessageType.Image when fileSizeMB > 5:
+                        return (false, "Image size exceeds 5MB limit", null);
+                    case MessageType.Audio when fileSizeMB > 16:
+                        return (false, "Audio size exceeds 16MB limit", null);
+                    case MessageType.Document when fileSizeMB > 100:
+                        return (false, "Document size exceeds 100MB limit", null);
                 }
 
-                var testMode = _configuration.GetValue<bool>("WhatsApp:TestMode", false);
-                if (testMode)
-                {
-                    _logger.LogInformation("🧪 TEST MODE: Would send media to {To} for team {TeamName}: {MediaUrl}",
-                        to, team.Name, mediaUrl);
-                    return true;
-                }
+                // ✅ Step 1: Upload to WhatsApp Cloud API
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
+                    fileBytes, fileName, mimeType,
+                    team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
+                    team.WhatsAppAccessToken ?? throw new InvalidOperationException("WhatsAppAccessToken is null"));
+                if (string.IsNullOrEmpty(mediaId))
+                    return (false, "Failed to upload media to WhatsApp", null);
 
+                // ✅ Step 2: Save locally for our records
+                var localUrl = await mediaService.SaveMediaLocallyAsync(fileBytes, fileName, mimeType);
+
+                // ✅ Step 3: Send message with media_id (NOT link!)
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "44");
                 var url = $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/messages";
-                var formattedPhoneNumber = new string(to.Where(char.IsDigit).ToArray());
 
                 string whatsappMediaType = mediaType switch
                 {
@@ -822,15 +1030,15 @@ namespace DriverConnectApp.API.Services
                 {
                     ["messaging_product"] = "whatsapp",
                     ["recipient_type"] = "individual",
-                    ["to"] = formattedPhoneNumber,
+                    ["to"] = formattedPhone,
                     ["type"] = whatsappMediaType,
-                    [whatsappMediaType] = new Dictionary<string, string>
+                    [whatsappMediaType] = new Dictionary<string, object>
                     {
-                        ["link"] = mediaUrl
+                        ["id"] = mediaId
                     }
                 };
 
-                if (!string.IsNullOrEmpty(caption) && (whatsappMediaType == "image" || whatsappMediaType == "video" || whatsappMediaType == "document"))
+                if (!string.IsNullOrEmpty(caption) && mediaType != MessageType.Audio)
                 {
                     ((Dictionary<string, object>)requestBody[whatsappMediaType])["caption"] = caption;
                 }
@@ -838,30 +1046,79 @@ namespace DriverConnectApp.API.Services
                 var json = JsonSerializer.Serialize(requestBody);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
                 var response = await _httpClient.PostAsync(url, content);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ WhatsApp media message sent to {To} for team {TeamName}",
-                        to, team.Name);
-                    return true;
+                    _logger.LogInformation("✅ WhatsApp {MediaType} sent to {To}", mediaType, to);
+                    return (true, null, localUrl);
                 }
                 else
                 {
-                    _logger.LogError("❌ Failed to send WhatsApp media message: Status={Status}, Error={Error}",
-                        response.StatusCode, responseContent);
-                    return false;
+                    var error = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                    var errorMessage = error.TryGetProperty("error", out var errorObj)
+                        ? errorObj.GetProperty("message").GetString()
+                        : "Unknown error";
+
+                    _logger.LogError("❌ Failed to send WhatsApp media: {Error}", errorMessage);
+                    return (false, errorMessage, null);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending WhatsApp media message to {To}", to);
+                _logger.LogError(ex, "Error sending WhatsApp media message");
+                return (false, ex.Message, null);
+            }
+        }
+
+
+        public async Task<bool> SendMediaFromUrlAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
+        {
+            try
+            {
+                var team = await GetTeamById(teamId);
+                if (team == null || !team.IsActive)
+                {
+                    _logger.LogError("Team {TeamId} not found or inactive", teamId);
+                    return false;
+                }
+
+                // Download file from URL
+                var response = await _httpClient.GetAsync(mediaUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to download media from {MediaUrl}", mediaUrl);
+                    return false;
+                }
+
+                var fileBytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = Path.GetFileName(mediaUrl) ?? $"media_{Guid.NewGuid()}";
+                var mimeType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+                // Use the new media upload method
+                var result = await SendMediaMessageAsync(to, fileBytes, fileName, mimeType, mediaType, teamId, caption);
+                return result.Success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending media from URL");
                 return false;
             }
         }
+
+
+        [Obsolete("Use SendMediaMessageAsync with byte array instead")]
+        public async Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
+        {
+            _logger.LogWarning("⚠️ Using deprecated SendMediaMessageAsync with URL. Convert to byte array method.");
+            return await SendMediaFromUrlAsync(to, mediaUrl, mediaType, teamId, caption);
+        }
+
+
+
 
         public async Task<bool> SendGroupMessageAsync(string groupId, string messageText, string? mediaUrl, MessageType messageType, Team team)
         {
@@ -888,9 +1145,33 @@ namespace DriverConnectApp.API.Services
                         text = new { body = messageText }
                     };
                 }
-                else if (!string.IsNullOrEmpty(mediaUrl))
+                else if (!string.IsNullOrEmpty(mediaUrl) && messageType != MessageType.Text)
                 {
-                    string mediaType = messageType switch
+                    // ✅ FIX: Renamed variable to avoid conflict
+                    var downloadResponse = await _httpClient.GetAsync(mediaUrl); // ❌ WAS: response
+                    if (!downloadResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("Failed to download media from {MediaUrl}", mediaUrl);
+                        return false;
+                    }
+
+                    var fileBytes = await downloadResponse.Content.ReadAsByteArrayAsync();
+                    var fileName = Path.GetFileName(mediaUrl) ?? $"media_{Guid.NewGuid()}";
+                    var mimeType = downloadResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+                    // Upload media to WhatsApp
+                    var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                    var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
+                        fileBytes, fileName, mimeType,
+                        team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
+                        team.WhatsAppAccessToken ?? throw new InvalidOperationException("WhatsAppAccessToken is null"));
+                    if (string.IsNullOrEmpty(mediaId))
+                    {
+                        _logger.LogError("Failed to upload media to WhatsApp for group message");
+                        return false;
+                    }
+
+                    string whatsappMediaType = messageType switch
                     {
                         MessageType.Image => "image",
                         MessageType.Video => "video",
@@ -899,26 +1180,29 @@ namespace DriverConnectApp.API.Services
                         _ => "document"
                     };
 
-                    var payload = new Dictionary<string, object>
+                    var requestBodyDict = new Dictionary<string, object>
                     {
                         ["messaging_product"] = "whatsapp",
                         ["recipient_type"] = "group",
                         ["to"] = groupId,
-                        ["type"] = mediaType
+                        ["type"] = whatsappMediaType,
+                        [whatsappMediaType] = new Dictionary<string, object>
+                        {
+                            ["id"] = mediaId
+                        }
                     };
 
-                    var mediaObject = new Dictionary<string, object>
+                    if (!string.IsNullOrEmpty(messageText))
                     {
-                        ["link"] = mediaUrl
-                    };
-
-                    if (messageType != MessageType.Text)
-                    {
-                        mediaObject["caption"] = messageText;
+                        // ✅ FIX: Cast properly to access dictionary
+                        var mediaDict = requestBodyDict[whatsappMediaType] as Dictionary<string, object>;
+                        if (mediaDict != null)
+                        {
+                            mediaDict["caption"] = messageText;
+                        }
                     }
 
-                    payload[mediaType] = mediaObject;
-                    requestBody = payload;
+                    requestBody = requestBodyDict;
                 }
                 else
                 {
@@ -931,9 +1215,9 @@ namespace DriverConnectApp.API.Services
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 _httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
-                var response = await _httpClient.PostAsync(url, content);
+                var response = await _httpClient.PostAsync(url, content); // ✅ This is fine now
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -957,6 +1241,114 @@ namespace DriverConnectApp.API.Services
                 _logger.LogError(ex, "❌ Error sending group message to {GroupId} for team {TeamName}", groupId, team.Name);
                 return false;
             }
+        }
+
+        public async Task<MediaUploadResult> UploadMediaForFrontend(IFormFile file, int teamId)
+        {
+            try
+            {
+                var team = await GetTeamById(teamId);
+                if (team == null)
+                    return new MediaUploadResult { Success = false, Error = "Team not found" };
+
+                // Validate file size
+                var maxSize = GetMaxFileSize(Path.GetExtension(file.FileName).ToLower());
+                if (file.Length > maxSize)
+                    return new MediaUploadResult
+                    {
+                        Success = false,
+                        Error = $"File exceeds {maxSize / (1024 * 1024)}MB limit"
+                    };
+
+                // Read file
+                using var memoryStream = new MemoryStream();
+                await file.CopyToAsync(memoryStream);
+                var fileBytes = memoryStream.ToArray();
+
+                // Upload to WhatsApp
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
+                    fileBytes, file.FileName, file.ContentType,
+                    team.WhatsAppPhoneNumberId, team.WhatsAppAccessToken);
+
+                if (string.IsNullOrEmpty(mediaId))
+                    return new MediaUploadResult { Success = false, Error = "Failed to upload to WhatsApp" };
+
+                // Save locally
+                var localUrl = await mediaService.SaveMediaLocallyAsync(fileBytes, file.FileName, file.ContentType);
+
+                return new MediaUploadResult
+                {
+                    Success = true,
+                    MediaId = mediaId,
+                    LocalUrl = localUrl,
+                    FileName = file.FileName,
+                    FileSize = file.Length,
+                    MimeType = file.ContentType
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading media for frontend");
+                return new MediaUploadResult { Success = false, Error = ex.Message };
+            }
+        }
+
+        private long GetMaxFileSize(string extension)
+        {
+            return extension switch
+            {
+                ".jpg" or ".jpeg" or ".png" or ".gif" => 5 * 1024 * 1024, // 5MB
+                ".mp4" or ".mov" or ".avi" => 16 * 1024 * 1024, // 16MB
+                ".mp3" or ".m4a" or ".ogg" => 16 * 1024 * 1024, // 16MB
+                ".pdf" or ".doc" or ".docx" or ".txt" => 100 * 1024 * 1024, // 100MB
+                _ => 5 * 1024 * 1024 // Default 5MB
+            };
+        }
+
+        // ✅ ADD: Model for media upload result
+        public class MediaUploadResult
+        {
+            public bool Success { get; set; }
+            public string? Error { get; set; }
+            public string? MediaId { get; set; }
+            public string? LocalUrl { get; set; }
+            public string? FileName { get; set; }
+            public long FileSize { get; set; }
+            public string? MimeType { get; set; }
+        }
+
+        // ✅ ADD: Method to check media status
+        public async Task<MediaStatusResult> CheckMediaStatus(string mediaId, int teamId)
+        {
+            try
+            {
+                var team = await GetTeamById(teamId);
+                if (team == null)
+                    return new MediaStatusResult { Exists = false, Error = "Team not found" };
+
+                var url = $"https://graph.facebook.com/v19.0/{mediaId}";
+                _httpClient.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+
+                var response = await _httpClient.GetAsync(url);
+                return new MediaStatusResult
+                {
+                    Exists = response.IsSuccessStatusCode,
+                    Error = response.IsSuccessStatusCode ? null : "Media not found"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking media status");
+                return new MediaStatusResult { Exists = false, Error = ex.Message };
+            }
+        }
+
+        public class MediaStatusResult
+        {
+            public bool Exists { get; set; }
+            public string? Error { get; set; }
         }
 
         public async Task<bool> SendLocationMessageAsync(string to, decimal latitude, decimal longitude, int teamId, string? name = null, string? address = null)
@@ -1166,7 +1558,7 @@ namespace DriverConnectApp.API.Services
                 "✅ Updated LastInboundMessageAt for group conversation {ConversationId}",
                 conversation.Id);
 
-            var messageData = ExtractMessageData(incomingMessage);
+            var messageData = ExtractMessageData(incomingMessage, team);
 
             var message = new Message
             {
@@ -1264,8 +1656,8 @@ namespace DriverConnectApp.API.Services
                 conversation.LastInboundMessageAt = DateTime.UtcNow;
                 conversation.LastMessageAt = DateTime.UtcNow;
 
-                // Extract message data
-                var messageData = ExtractMessageData(incomingMessage);
+                // ✅ EXTRACT MESSAGE DATA WITH MEDIA DOWNLOADING
+                var messageData = ExtractMessageData(incomingMessage, team);
 
                 // Create message record
                 var message = new Message
@@ -1285,15 +1677,16 @@ namespace DriverConnectApp.API.Services
                     SenderPhoneNumber = normalizedPhone,
                     SenderName = driver.Name,
                     SentAt = DateTime.UtcNow,
-                    WhatsAppMessageId = incomingMessage.Id, // ✅ Use WhatsApp's ID
+                    WhatsAppMessageId = incomingMessage.Id,
                     Context = incomingMessage.Context?.Id,
-                    Status = MessageStatus.Delivered // Inbound messages are automatically delivered
+                    Status = MessageStatus.Delivered
                 };
 
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("✅ Inbound message saved: {MessageId}", incomingMessage.Id);
+                _logger.LogInformation("✅ Inbound message saved: {MessageId}, MediaUrl: {MediaUrl}",
+                    incomingMessage.Id, messageData.MediaUrl);
             }
             catch (Exception ex)
             {
@@ -1530,6 +1923,7 @@ namespace DriverConnectApp.API.Services
 
                         if (incomingMessage != null)
                         {
+                            // ✅ FIX: Add await to fix CS1998 warning
                             await ProcessIncomingMessage(incomingMessage, team.Id);
                         }
                     }
@@ -1683,7 +2077,7 @@ namespace DriverConnectApp.API.Services
 
         private (string Content, MessageType Type, string? MediaUrl, string? FileName,
                  long? FileSize, string? MimeType, string? Location, string? ContactName,
-                 string? ContactPhone) ExtractMessageData(IncomingMessage incomingMessage)
+                 string? ContactPhone) ExtractMessageData(IncomingMessage incomingMessage, Team team)
         {
             string content = string.Empty;
             MessageType type = MessageType.Text;
@@ -1706,14 +2100,52 @@ namespace DriverConnectApp.API.Services
                 type = MessageType.Image;
                 mediaUrl = incomingMessage.Image.Link;
                 mimeType = incomingMessage.Image.MimeType;
+                fileName = "image.jpg";
+
+                // ✅ Try to download and save media
+                if (!string.IsNullOrEmpty(incomingMessage.Image.Id))
+                {
+                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Image.Id, team, "image", mimeType).Result;
+                }
+            }
+            else if (incomingMessage.Video != null) // ✅ ADDED
+            {
+                content = incomingMessage.Video.Caption ?? "Video";
+                type = MessageType.Video;
+                mediaUrl = incomingMessage.Video.Link;
+                mimeType = incomingMessage.Video.MimeType;
+                fileName = "video.mp4";
+
+                if (!string.IsNullOrEmpty(incomingMessage.Video.Id))
+                {
+                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Video.Id, team, "video", mimeType).Result;
+                }
+            }
+            else if (incomingMessage.Audio != null) // ✅ ADDED
+            {
+                content = "Audio message";
+                type = MessageType.Audio;
+                mediaUrl = incomingMessage.Audio.Link;
+                mimeType = incomingMessage.Audio.MimeType;
+                fileName = "audio.mp3";
+
+                if (!string.IsNullOrEmpty(incomingMessage.Audio.Id))
+                {
+                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Audio.Id, team, "audio", mimeType).Result;
+                }
             }
             else if (incomingMessage.Document != null)
             {
                 content = incomingMessage.Document.Caption ?? "Document";
                 type = MessageType.Document;
                 mediaUrl = incomingMessage.Document.Link;
-                fileName = incomingMessage.Document.Filename;
+                fileName = incomingMessage.Document.Filename ?? "document.pdf";
                 mimeType = incomingMessage.Document.MimeType;
+
+                if (!string.IsNullOrEmpty(incomingMessage.Document.Id))
+                {
+                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Document.Id, team, "document", mimeType).Result;
+                }
             }
             else if (incomingMessage.Location != null)
             {
@@ -1732,6 +2164,40 @@ namespace DriverConnectApp.API.Services
 
             return (content, type, mediaUrl, fileName, fileSize, mimeType, location, contactName, contactPhone);
         }
+
+        private async Task<string?> DownloadAndSaveWhatsAppMedia(string mediaId, Team team, string mediaType, string? originalMimeType)
+        {
+            try
+            {
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+
+                var result = await mediaService.DownloadWhatsAppMediaAsync(
+                    mediaId,
+                    team.WhatsAppAccessToken ?? throw new InvalidOperationException("WhatsAppAccessToken is null"),
+                    $"{mediaType}_{mediaId}"
+                );
+
+                if (result.FileBytes == null)
+                {
+                    _logger.LogError("Failed to download WhatsApp media {MediaId}", mediaId);
+                    return null;
+                }
+
+                // ✅ FIX: Use mediaService.GetFileExtension (now public)
+                var fileName = $"{Guid.NewGuid()}{mediaService.GetFileExtension(result.MimeType ?? originalMimeType ?? "application/octet-stream")}";
+                var localUrl = await mediaService.SaveMediaLocallyAsync(result.FileBytes, fileName, result.MimeType ?? originalMimeType ?? "application/octet-stream");
+
+                _logger.LogInformation("✅ Downloaded and saved WhatsApp media: {LocalUrl}", localUrl);
+                return localUrl;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading WhatsApp media {MediaId}", mediaId);
+                return null;
+            }
+        }
+
+
 
         public string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters)
         {

@@ -2555,18 +2555,52 @@ const preloadAudio = (message: MessageDto) => {
   }
 };
 
-const getMediaUrl = (url: string | undefined): string => {
-  if (!url) return '';
-  
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
+const getMediaUrl = (message: MessageDto): string => {
+  if (!message.MediaUrl && message.Id) {
+    // Use API endpoint if no direct URL
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
+    return `${baseUrl}/api/messages/preview/${message.Id}`;
   }
   
-  const cleanUrl = url.replace(/^\/+/, '');
+  if (message.MediaUrl?.startsWith('http')) {
+    return message.MediaUrl;
+  }
   
+  // Handle local uploads
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
-  
-  return `${baseUrl}/${cleanUrl}`;
+  return `${baseUrl}${message.MediaUrl?.startsWith('/') ? '' : '/'}${message.MediaUrl || ''}`;
+};
+
+const downloadMedia = async (message: MessageDto) => {
+  try {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
+    const downloadUrl = `${baseUrl}/api/messages/download/${message.Id}`;
+    
+    // Fetch with credentials
+    const response = await fetch(downloadUrl, {
+      credentials: 'include',
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`
+      }
+    });
+    
+    if (!response.ok) throw new Error('Download failed');
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = message.FileName || `whatsapp_media_${message.Id}`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+  } catch (error) {
+    console.error('Download failed:', error);
+    // Fallback: Open in new tab
+    window.open(getMediaUrl(message), '_blank');
+  }
 };
 
 // Image handling
@@ -2575,10 +2609,46 @@ const handleImageLoad = (messageId: number) => {
   imageErrors.value[messageId] = false;
 };
 
-const handleImageError = (messageId: number, event: Event) => {
-  console.error('Failed to load image for message:', messageId);
-  imageLoadingStates.value[messageId] = false;
+const handleImageError = async (messageId: number, event: Event) => {
+  console.error('Direct image load failed for message:', messageId);
   imageErrors.value[messageId] = true;
+  
+  // Try API endpoint as fallback
+  const message = messages.value.find(m => m.Id === messageId);
+  if (message) {
+    const apiUrl = `${import.meta.env.VITE_API_BASE_URL}/api/messages/preview/${messageId}`;
+    
+    try {
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.url) {
+          // Update message with API URL
+          const index = messages.value.findIndex(m => m.Id === messageId);
+          if (index !== -1) {
+            messages.value[index].MediaUrl = data.url;
+            // Force re-render
+            messages.value = [...messages.value];
+            imageErrors.value[messageId] = false;
+          }
+        }
+      }
+    } catch (apiError) {
+      console.error('API fallback also failed:', apiError);
+    }
+  }
+};
+
+const extractUrl = (text: string): string | null => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const match = text.match(urlRegex);
+  return match ? match[0] : null;
+};
+
+const isLinkMessage = (message: MessageDto): boolean => {
+  return message.Content?.includes('http') || 
+         message.MessageType === 'Link' || 
+         !!extractUrl(message.Content || '');
 };
 
 const retryImageLoad = (message: MessageDto) => {

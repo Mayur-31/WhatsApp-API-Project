@@ -13,7 +13,14 @@ namespace DriverConnectApp.API.Services
         Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType messageType, int teamId, string? caption = null);
         Task<bool> SendLocationMessageAsync(string to, decimal latitude, decimal longitude, int teamId, string? name = null, string? address = null);
         Task ProcessWebhookAsync(string webhookData);
-
+        Task<(bool Success, string? ErrorMessage, string? MediaUrl)> SendMediaMessageAsync(
+            string to,
+            byte[] fileBytes,
+            string fileName,
+            string mimeType,
+            MessageType mediaType,
+            int teamId,
+            string? caption = null);
         // Team management
         Task<Team?> GetTeamByPhoneNumberId(string phoneNumberId);
         Task<Team?> GetTeamById(int teamId); // ✅ Make this public
