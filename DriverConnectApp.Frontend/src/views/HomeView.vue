@@ -249,7 +249,7 @@
         </div>  
 
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
+        <div class="flex-1 flex flex-col bg-gray-50 min-h-0 relative">
           <div 
             v-if="!selectedConversation" 
             class="flex-1 flex items-center justify-center bg-green-50 text-gray-500 p-8 text-center"
@@ -372,6 +372,7 @@
                         <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                       </svg>
                     </button>
+                    
         
                     <!-- Dropdown Menu -->
                     <Transition
@@ -382,6 +383,16 @@
                       leave-from-class="transform opacity-100 scale-100"
                       leave-to-class="transform opacity-0 scale-95"
                     >
+                      <button
+                        v-if="showScrollBtn"
+                        @click="scrollToBottom"
+                        class="absolute bottom-28 right-6 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-300 flex items-center justify-center z-40 hover:bg-gray-100 transition hover:scale-110"
+                        title="Scroll to bottom"
+                      >
+                        <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 15l-6-6 1.4-1.4L12 12.2l4.6-4.6L18 9z"/>
+                        </svg>
+                      </button>
                       <div 
                         v-if="showActionsDropdown"
                         class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1"
@@ -465,8 +476,7 @@
 
             <!-- Messages Area -->
             <div 
-              v-else
-              class="h-full overflow-y-auto"
+              class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" 
               ref="chatContainer"
               @scroll="handleScroll"
             >
@@ -855,7 +865,7 @@
             
             
             <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t border-gray-300">
+            <div class="bg-white px-6 py-4 border-t">
               <div class="flex items-center space-x-4">
                 <!-- Media Toggle Button -->
                 <button 
@@ -1747,7 +1757,8 @@ const selectedTeamId = ref<number>(0);
 const selectedTeam = ref<any>(null);
 const showActionMenu = ref(false);
 const showActionsDropdown = ref(false);
-
+const showScrollBtn = ref(false);
+const isUserAtBottom = ref(true);
 // 24-hour window state
 const showTemplateDialog = ref(false);
 const templatePhoneNumber = ref('');
@@ -1939,13 +1950,14 @@ const filteredConversations = computed(() => {
 const handleScroll = () => {
   if (!chatContainer.value) return;
   
-  const container = chatContainer.value;
-  const scrollTop = container.scrollTop;
-  const scrollHeight = container.scrollHeight;
-  const clientHeight = container.clientHeight;
+  const el = chatContainer.value;
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
   
-  // Check if user is at bottom (with 100px threshold)
-  isAtBottom.value = scrollHeight - scrollTop - clientHeight < 100;
+  // Show button if user scrolled up more than 150px from bottom
+  showScrollBtn.value = distanceToBottom > 150;
+  
+  // Update whether user is at bottom
+  isUserAtBottom.value = distanceToBottom < 40;
 };
 
 // NEW: 24-hour window methods
@@ -2455,10 +2467,20 @@ onUnmounted(() => {
 });
 
 // Watch for messages changes to preload media
-watch(messages, async (newMessages, oldMessages) => {
-  if (newMessages.length > oldMessages.length && isAtBottom.value) {
-    await nextTick();
-    scrollToBottom();
+watch(messages, (newMessages) => {
+  if (newMessages && newMessages.length > 0) {
+    console.log('Messages updated, preloading media...');
+    preloadMedia();
+    
+    // Auto-scroll only if user is at the bottom
+    if (isUserAtBottom.value) {
+      nextTick(() => {
+        chatContainer.value?.scrollTo({
+          top: chatContainer.value.scrollHeight,
+          behavior: 'auto'
+        });
+      });
+    }
   }
 }, { deep: true });
 
@@ -3378,7 +3400,10 @@ const scrollToBottom = async () => {
       top: chatContainer.value.scrollHeight,
       behavior: 'smooth'
     });
-    isAtBottom.value = true;
+    
+    // Hide the button after scrolling
+    showScrollBtn.value = false;
+    isUserAtBottom.value = true;
   }
 };
 
