@@ -454,7 +454,11 @@
             </div>
 
             <!-- Messages Area -->
-            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+            <div 
+              class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50 relative" 
+              ref="chatContainer"
+              @scroll="handleScroll"
+            >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -742,6 +746,26 @@
                   </div>
                 </div>
               </div>
+              <!-- WhatsApp-like Scroll-to-Bottom Button -->
+              <transition 
+                enter-active-class="transition-opacity duration-200"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition-opacity duration-200"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+              >
+                <button
+                  v-if="showScrollBtn"
+                  @click="scrollToBottom"
+                  class="scroll-bottom-btn"
+                  title="Scroll to bottom"
+                >
+                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14.9l-6.4-6.4 1.4-1.4 5 5 5-5 1.4 1.4-6.4 6.4z"></path>
+                  </svg>
+                </button>
+              </transition>
             </div>
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
@@ -2405,6 +2429,13 @@ watch(messages, (newMessages) => {
   if (newMessages && newMessages.length > 0) {
     console.log('Messages updated, preloading media...');
     preloadMedia();
+    
+    // Auto-scroll only if user is at the bottom
+    if (isUserAtBottom.value) {
+      nextTick(() => {
+        scrollToBottom(false); // Use instant scroll for new messages
+      });
+    }
   }
 }, { deep: true });
 
@@ -3312,11 +3343,31 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = async () => {
+const scrollToBottom = async (smooth = true) => {
   await nextTick();
   if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    chatContainer.value.scrollTo({
+      top: chatContainer.value.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+    
+    // Hide the button after scrolling
+    showScrollBtn.value = false;
+    isUserAtBottom.value = true;
   }
+};
+
+const handleScroll = () => {
+  if (!chatContainer.value) return;
+  
+  const el = chatContainer.value;
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  
+  // Show button if user scrolled up more than 300px from bottom
+  showScrollBtn.value = distanceToBottom > 300;
+  
+  // Update whether user is at bottom
+  isUserAtBottom.value = distanceToBottom < 50;
 };
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
@@ -3829,6 +3880,7 @@ const formatRelativeTime = (dateString: string): string => {
 
 // Enhanced: Reply navigation with WhatsApp-like behavior
 const scrollToRepliedMessage = async (messageId: number) => {
+  showScrollBtn.value = false;
   console.log(`Attempting to scroll to original message: ${messageId}`);
   
   await nextTick();
@@ -3899,21 +3951,22 @@ const scrollToRepliedMessage = async (messageId: number) => {
 
 <style scoped>
 /* Custom scrollbar */
-.overflow-y-auto::-webkit-scrollbar {
+.bg-green-50::-webkit-scrollbar {
   width: 6px;
 }
 
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+.bg-green-50::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 3px;
 }
 
-.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+.bg-green-50::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.bg-green-50::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* Smooth transitions */
@@ -4134,6 +4187,40 @@ img {
 
 img:hover {
   transform: scale(1.02);
+}
+
+/* WhatsApp-like Scroll-to-Bottom Button */
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 100px; /* Position above message input */
+  right: 30px;
+  width: 40px;
+  height: 40px;
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  color: #54656f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+  transition: all 0.2s ease;
+}
+
+.scroll-bottom-btn:hover {
+  background-color: #f8f9fa;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.scroll-bottom-btn:active {
+  transform: translateY(0);
+}
+
+.relative {
+  position: relative;
 }
 
 /* Button hover effects */
