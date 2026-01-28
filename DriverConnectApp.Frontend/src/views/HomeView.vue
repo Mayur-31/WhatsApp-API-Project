@@ -246,10 +246,10 @@
               </div>
             </div>
           </div>
-          
+        </div>  
 
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
+        <div class="flex flex-col h-full flex-1">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -262,7 +262,7 @@
           </div>
           <div class="flex-shrink-0">
             <!-- Chat Header -->
-            <div class="bg-white border-b border-gray-200 px-4 py-3">
+            <div class="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
               <div class="flex items-center justify-between">
     
               <!-- Left: Contact Info -->
@@ -439,7 +439,7 @@
             
             <!-- 24-Hour Window Warning (Slim Banner) -->
             <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                  class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between">
+                  class="flex-shrink-0 bg-yellow-50 px-4 py-2 border-b border-yellow-200">
               <div class="flex items-center space-x-2 text-sm">
                 <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
@@ -452,9 +452,18 @@
                 Send Template
               </button>
             </div>
-
-            <!-- Messages Area -->
-            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+            
+            <!-- WhatsApp Messages Container -->
+            <div class="flex-1 min-h-0 relative bg-green-50">
+              <!-- Scrollable Messages Area -->
+              <div 
+                  class="h-full overflow-y-auto p-6 space-y-4"
+                  ref="chatContainer"
+                  @scroll="handleScroll"
+                  @wheel="handleWheel"
+              >
+              <!-- Messages Area -->
+            
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -743,11 +752,28 @@
                 </div>
               </div>
             </div>
+            
+            <!-- Floating Scroll-to-Bottom Button -->
+            <transition name="scroll-button">
+              <button
+                v-if="!isAtBottom && !messagesLoading && messages && messages.length > 0"
+                @click="scrollToBottom"
+                class="scroll-to-bottom-btn"
+                :class="{ 'scrolling': isScrolling }"
+                title="Scroll to latest messages"
+                aria-label="Scroll to latest messages"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                </svg>
+              </button>
+            </transition>
+            
+          
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
             <div 
-              v-if="replyingToMessage" 
-              class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
+              v-if="replyingToMessage" class="flex-shrink-0 bg-blue-50 px-6 py-2 border-t border-blue-200"
               @click="scrollToRepliedMessage(replyingToMessage.Id)"
               :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
             >
@@ -765,7 +791,7 @@
             </div>
 
             <!-- Upload Progress Section -->
-            <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200">
+            <div v-if="isUploading" class="flex-shrink-0 bg-blue-50 px-6 py-3 border-t border-blue-200">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
                 <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
@@ -779,7 +805,7 @@
             </div>
 
             <!-- File Info Section -->
-            <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200">
+            <div v-if="showFileInfo && uploadedFile" class="flex-shrink-0 bg-green-50 px-6 py-2 border-t border-green-200">
               <div class="flex items-center justify-between">
                 <span class="text-sm text-green-700">
                   📎 {{ uploadedFile.name }} ({{ fileInfo }})
@@ -794,7 +820,7 @@
             </div>
 
             <!-- Enhanced Media Options -->
-            <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t">
+            <div v-if="showMediaOptions" class="flex-shrink-0 bg-gray-100 px-6 py-3 border-t">
               <div class="flex justify-between items-center mb-3">
                 <span class="text-sm font-medium text-gray-700">Send Media</span>
                 <button 
@@ -824,7 +850,7 @@
             
             
             <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t">
+            <div class="flex-shrink-0 bg-white px-6 py-4 border-t">
               <div class="flex space-x-4 items-start">
                 <!-- Media Toggle Button -->
                 <button 
@@ -1784,6 +1810,9 @@ const selectedConversation = ref<ConversationDetailDto | null>(null);
 const messages = ref<MessageDto[]>([]);
 const newMessage = ref('');
 const chatContainer = ref<HTMLElement | null>(null);
+const isAtBottom = ref(true);
+const isScrolling = ref(false);
+const scrollTimeout = ref<number | null>(null);
 const showUnansweredOnly = ref(false);
 const showGroupsOnly = ref(false);
 const unansweredCount = ref(0);
@@ -1900,6 +1929,49 @@ const filteredConversations = computed(() => {
     return nameMatch || phoneMatch || groupNameMatch || groupIdMatch;
   });
 });
+
+const handleScroll = () => {
+  if (!chatContainer.value) return;
+  
+  const element = chatContainer.value;
+  const scrollTop = element.scrollTop;
+  const scrollHeight = element.scrollHeight;
+  const clientHeight = element.clientHeight;
+  
+  // Calculate if we're at the bottom (with 50px threshold)
+  const atBottom = scrollHeight - scrollTop - clientHeight < 50;
+  
+  // Update state only if changed
+  if (isAtBottom.value !== atBottom) {
+    isAtBottom.value = atBottom;
+  }
+  
+  // Show scrolling state
+  isScrolling.value = true;
+  
+  // Clear previous timeout
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value);
+  }
+  
+  // Set timeout to clear scrolling state after 150ms of no scrolling
+  scrollTimeout.value = window.setTimeout(() => {
+    isScrolling.value = false;
+  }, 150);
+};
+
+const handleWheel = (event: WheelEvent) => {
+  if (!chatContainer.value) return;
+  
+  // Prevent page scrolling when at the container boundaries
+  const element = chatContainer.value;
+  const isAtTop = element.scrollTop === 0;
+  const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight;
+  
+  if ((isAtTop && event.deltaY < 0) || (isAtBottom && event.deltaY > 0)) {
+    event.preventDefault();
+  }
+};
 
 // NEW: 24-hour window methods
 const getInputPlaceholder = () => {
@@ -2369,7 +2441,11 @@ onMounted(async () => {
   
   // Load teams first
   await loadTeams();
-  
+  await nextTick();
+  if (chatContainer.value && selectedConversation.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    isAtBottom.value = true;
+  }
   // Then load conversations with team context
   await loadConversations();
   startPolling();
@@ -2383,6 +2459,40 @@ onMounted(async () => {
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
   document.addEventListener('click', closeDropdownOnClickOutside);
+  window.addEventListener('resize', handleWindowResize);
+});
+
+const handleWindowResize = () => {
+  if (isAtBottom.value && chatContainer.value) {
+    // Maintain scroll position at bottom on resize
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+  }
+};
+
+watch(
+  () => messages.value?.length || 0,
+  async (newLength, oldLength) => {
+    // Only auto-scroll if:
+    // 1. New messages arrived
+    // 2. User is at the bottom
+    // 3. Not currently manually scrolling
+    if (newLength > oldLength && isAtBottom.value && !isScrolling.value) {
+      await nextTick();
+      scrollToBottom();
+    }
+  }
+);
+
+// Reset scroll when conversation changes
+watch(selectedConversation, async () => {
+  isAtBottom.value = true;
+  isScrolling.value = false;
+  
+  // Wait for DOM update and scroll immediately (no animation)
+  await nextTick();
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+  }
 });
 
 // Watch for team changes
@@ -2393,11 +2503,15 @@ watch(selectedTeamId, async (newTeamId) => {
 
 onUnmounted(() => {
   stopPolling();
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value);
+  }
   if (windowStatusPollInterval.value) {
     clearInterval(windowStatusPollInterval.value);
     windowStatusPollInterval.value = null;
   }
   document.removeEventListener('click', closeDropdownOnClickOutside);
+  window.removeEventListener('resize', handleWindowResize);
 });
 
 // Watch for messages changes to preload media
@@ -2407,6 +2521,19 @@ watch(messages, (newMessages) => {
     preloadMedia();
   }
 }, { deep: true });
+
+const getScrollInfo = () => {
+  if (!chatContainer.value) return null;
+  
+  const el = chatContainer.value;
+  return {
+    scrollTop: el.scrollTop,
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+    atBottom: el.scrollHeight - el.scrollTop - el.clientHeight < 50,
+    distanceFromBottom: el.scrollHeight - el.scrollTop - el.clientHeight
+  };
+};
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3312,11 +3439,35 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = async () => {
-  await nextTick();
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-  }
+const scrollToBottom = () => {
+  if (!chatContainer.value) return;
+  
+  const element = chatContainer.value;
+  const startPosition = element.scrollTop;
+  const targetPosition = element.scrollHeight - element.clientHeight;
+  const distance = targetPosition - startPosition;
+  const duration = Math.min(500, Math.max(300, distance * 0.5));
+  const startTime = performance.now();
+  
+  const animateScroll = (currentTime: number) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing function for smooth animation
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easedProgress = easeOutCubic(progress);
+    
+    element.scrollTop = startPosition + distance * easedProgress;
+    
+    if (progress < 1) {
+      requestAnimationFrame(animateScroll);
+    } else {
+      isAtBottom.value = true;
+      isScrolling.value = false;
+    }
+  };
+  
+  requestAnimationFrame(animateScroll);
 };
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
@@ -3900,20 +4051,114 @@ const scrollToRepliedMessage = async (messageId: number) => {
 <style scoped>
 /* Custom scrollbar */
 .overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
+  width: 7px;
+  height: 7px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
   background: transparent;
+  border-radius: 10px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+
+.overflow-y-auto {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.overflow-y-auto * {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  right: 20px;
+  bottom: 80px; /* Position above the input area */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #54656f;
+  box-shadow: 
+    0 2px 4px rgba(11, 20, 26, 0.08),
+    0 4px 12px rgba(11, 20, 26, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.95;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.scroll-to-bottom-btn:hover {
+  background: #f8f9fa;
+  box-shadow: 
+    0 4px 8px rgba(11, 20, 26, 0.12),
+    0 8px 16px rgba(11, 20, 26, 0.16);
+  transform: translateY(-2px) scale(1.05);
+  opacity: 1;
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 
+    0 1px 2px rgba(11, 20, 26, 0.08),
+    0 2px 8px rgba(11, 20, 26, 0.1);
+}
+
+.scroll-to-bottom-btn.scrolling {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.scroll-to-bottom-btn svg {
+  stroke-width: 2.5;
+}
+
+.scroll-button-enter-active,
+.scroll-button-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scroll-button-enter-from,
+.scroll-button-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.8);
+}
+
+.flex-1.min-h-0 {
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 /* Smooth transitions */
@@ -4143,21 +4388,41 @@ button {
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
-  /* Full-width sidebar on mobile */
-  .w-\[360px\] {
-    width: 100% !important;
+  .scroll-to-bottom-btn {
+    right: 16px;
+    bottom: 72px;
+    width: 40px;
+    height: 40px;
   }
   
-  /* Hide chat on mobile when sidebar is active */
-  .flex-1.flex-col {
-    display: none;
-  }
-  
-  /* Show chat when conversation is selected */
-  .flex-1.flex-col.active {
-    display: flex;
+  .overflow-y-auto::-webkit-scrollbar {
+    width: 4px;
   }
 }
+
+@media (prefers-contrast: high) {
+  .overflow-y-auto::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  
+  .scroll-to-bottom-btn {
+    border: 2px solid rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-to-bottom-btn,
+  .scroll-button-enter-active,
+  .scroll-button-leave-active {
+    transition: opacity 0.1s ease;
+  }
+  
+  .scroll-to-bottom-btn:hover {
+    transform: none;
+  }
+}
+
 
 /* Avatar gradient styles */
 .bg-gradient-to-br {
