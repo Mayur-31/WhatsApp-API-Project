@@ -551,15 +551,15 @@
                           
                           <!-- Image -->
                           <img 
-                            v-show="!imageLoadingStates[message.Id] && !imageErrors[message.Id]"
                             :src="getMediaUrl(message.MediaUrl)" 
-                            :alt="message.FileName || 'Image'" 
-                            class="max-w-full h-auto rounded-lg mb-2 max-h-64 object-cover cursor-pointer"
+                            :alt="message.FileName || 'Image'"
+                            
+                            class="media-image"
                             @click="openImageModal(getMediaUrl(message.MediaUrl))"
                             @load="handleImageLoad(message.Id)"
                             @error="handleImageError(message.Id, $event)"
                             loading="lazy"
-                            :key="'img-' + message.Id + '-' + imageRetryCount[message.Id]"
+                            :key="'img-' + message.Id"
                           />
                         </div>
                         
@@ -600,14 +600,14 @@
                           
                           <!-- Video -->
                           <video 
-                            v-show="!videoLoadingStates[message.Id] && !videoErrors[message.Id]"
-                            :src="getMediaUrl(message.MediaUrl)" 
-                            controls 
-                            class="max-w-full h-auto rounded-lg mb-2 max-h-64"
+                            :src="getMediaUrl(message.MediaUrl)"
+                            controls
+                            class="media-video"
+                            
                             @loadstart="handleVideoLoadStart(message.Id)"
                             @loadeddata="handleVideoLoad(message.Id)"
                             @error="handleVideoError(message.Id, $event)"
-                            :key="'video-' + message.Id + '-' + videoRetryCount[message.Id]"
+                            :key="'video-' + message.Id"
                           >
                             Your browser does not support the video tag.
                           </video>
@@ -643,14 +643,14 @@
                           
                           <!-- Audio -->
                           <audio 
-                            v-show="!audioLoadingStates[message.Id] && !audioErrors[message.Id]"
-                            :src="getMediaUrl(message.MediaUrl)" 
-                            controls 
-                            class="w-full mb-2"
+                            :src="getMediaUrl(message.MediaUrl)"
+                            controls
+                            class="media-audio"
+                           
                             @loadstart="handleAudioLoadStart(message.Id)"
                             @loadeddata="handleAudioLoad(message.Id)"
                             @error="handleAudioError(message.Id, $event)"
-                            :key="'audio-' + message.Id + '-' + audioRetryCount[message.Id]"
+                            :key="'audio-' + message.Id"
                           >
                             Your browser does not support the audio element.
                           </audio>
@@ -700,7 +700,13 @@
                       <div v-else>
                         <p class="text-sm break-words">{{ message.Content }}</p>
                       </div>
-                      
+                      <button 
+                        v-if="message.MessageType !== 'Text'"
+                        @click="debugMediaUrl(message)"
+                        class="text-xs bg-gray-200 p-1 rounded"
+                      >
+                        Debug
+                      </button>
                       <!-- WhatsApp Message Status & Interactions -->
                       <div class="flex items-center justify-between mt-1">
                         <div class="flex items-center space-x-1">
@@ -1729,6 +1735,15 @@ const closeDropdownOnClickOutside = (event) => {
   }
 };
 
+
+const debugMediaUrl = (message: MessageDto) => {
+  console.log('Message ID:', message.Id);
+  console.log('Media URL from DB:', message.MediaUrl);
+  console.log('Processed URL:', getMediaUrl(message.MediaUrl));
+  console.log('Message Type:', message.MessageType);
+  console.log('File Name:', message.FileName);
+};
+
 const getInitials = (name: string): string => {
   if (!name) return '?';
   const parts = name.trim().split(' ');
@@ -2555,25 +2570,33 @@ const preloadAudio = (message: MessageDto) => {
   }
 };
 
-const getMediaUrl = (message: MessageDto): string => {
-  if (!message.MediaUrl && message.Id) {
-    // Use API endpoint if no direct URL
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
-    return `${baseUrl}/api/messages/preview/${message.Id}`;
+const getMediaUrl = (url: string | undefined): string => {
+  if (!url) return '';
+  
+  // If it's already a full URL (starting with http), use it directly
+  if (url.startsWith('http')) {
+    // Check if it's a WhatsApp temporary URL - if yes, return empty
+    if (url.includes('whatsapp.net') || url.includes('fbsbx.com') || url.includes('facebook.com')) {
+      console.warn('WhatsApp temporary URL detected, skipping:', url);
+      return '';
+    }
+    return url;
   }
   
-  if (message.MediaUrl?.startsWith('http')) {
-    return message.MediaUrl;
-  }
+  // If it's a relative path, prepend base URL
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
   
-  // Handle local uploads
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
-  return `${baseUrl}${message.MediaUrl?.startsWith('/') ? '' : '/'}${message.MediaUrl || ''}`;
+  // Ensure proper formatting
+  if (url.startsWith('/')) {
+    return `${baseUrl}${url}`;
+  } else {
+    return `${baseUrl}/${url}`;
+  }
 };
 
 const downloadMedia = async (message: MessageDto) => {
   try {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:5001';
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
     const downloadUrl = `${baseUrl}/api/messages/download/${message.Id}`;
     
     // Fetch with credentials

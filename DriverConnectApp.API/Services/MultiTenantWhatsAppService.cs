@@ -1,5 +1,4 @@
-﻿using Azure.Core;
-using DriverConnectApp.API.Models;
+﻿using DriverConnectApp.API.Models;
 using DriverConnectApp.API.Models.WhatsApp;
 using DriverConnectApp.Domain.Entities;
 using DriverConnectApp.Domain.Enums;
@@ -56,17 +55,20 @@ namespace DriverConnectApp.API.Services
             private readonly IWebHostEnvironment _environment;
             private readonly ILogger _logger;
             private readonly IConfiguration _configuration;
+            private readonly IHttpContextAccessor _httpContextAccessor;
 
             public WhatsAppMediaService(
                 HttpClient httpClient,
                 IWebHostEnvironment environment,
                 ILogger logger,
-                IConfiguration configuration)
+                IConfiguration configuration,
+                IHttpContextAccessor httpContextAccessor)
             {
                 _httpClient = httpClient;
                 _environment = environment;
                 _logger = logger;
                 _configuration = configuration;
+                _httpContextAccessor = httpContextAccessor;
                 _httpClient.Timeout = TimeSpan.FromSeconds(60);
             }
 
@@ -115,7 +117,6 @@ namespace DriverConnectApp.API.Services
                     return null;
                 }
             }
-
 
             public async Task<(byte[]? FileBytes, string? MimeType, string? FileName)> DownloadWhatsAppMediaAsync(
                 string mediaId,
@@ -178,6 +179,93 @@ namespace DriverConnectApp.API.Services
                 }
             }
 
+            public async Task<(string? LocalPath, string? FileName, long? FileSize)> DownloadAndStoreMediaAsync(
+                string mediaId,
+                string accessToken,
+                string mediaType)
+            {
+                try
+                {
+                    _logger.LogInformation("Downloading media {MediaId} of type {MediaType}", mediaId, mediaType);
+
+                    // Step 1: Get media URL from WhatsApp
+                    var mediaUrl = $"https://graph.facebook.com/v19.0/{mediaId}";
+
+                    using var request = new HttpRequestMessage(HttpMethod.Get, mediaUrl);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                    var response = await _httpClient.SendAsync(request);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("Failed to get media URL: {StatusCode}", response.StatusCode);
+                        return (null, null, null);
+                    }
+
+                    var content = await response.Content.ReadAsStringAsync();
+                    using var jsonDoc = JsonDocument.Parse(content);
+
+                    if (!jsonDoc.RootElement.TryGetProperty("url", out var urlElement))
+                    {
+                        _logger.LogError("No URL in media response");
+                        return (null, null, null);
+                    }
+
+                    var downloadUrl = urlElement.GetString();
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        _logger.LogError("Empty download URL");
+                        return (null, null, null);
+                    }
+
+                    // Step 2: Download the actual media
+                    using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
+                    downloadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                    var downloadResponse = await _httpClient.SendAsync(downloadRequest);
+                    if (!downloadResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("Failed to download media: {StatusCode}", downloadResponse.StatusCode);
+                        return (null, null, null);
+                    }
+
+                    var fileBytes = await downloadResponse.Content.ReadAsByteArrayAsync();
+                    var mimeType = downloadResponse.Content.Headers.ContentType?.MediaType ??
+                                  (mediaType.ToLower() switch
+                                  {
+                                      "image" => "image/jpeg",
+                                      "video" => "video/mp4",
+                                      "audio" => "audio/mpeg",
+                                      "document" => "application/octet-stream",
+                                      _ => "application/octet-stream"
+                                  });
+
+                    // Step 3: Save to local storage
+                    var extension = GetFileExtension(mimeType);
+                    var fileName = $"{Guid.NewGuid()}{extension}";
+
+                    var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads");
+                    if (!Directory.Exists(uploadsDir))
+                    {
+                        Directory.CreateDirectory(uploadsDir);
+                    }
+
+                    var filePath = Path.Combine(uploadsDir, fileName);
+                    await System.IO.File.WriteAllBytesAsync(filePath, fileBytes);
+
+                    // Step 4: Return the URL accessible from frontend
+                    var baseUrl = _configuration["BaseUrl"] ?? $"{(_httpContextAccessor.HttpContext?.Request.Scheme ?? "https")}://{(_httpContextAccessor.HttpContext?.Request.Host.Value ?? "onestopvan.work.gd")}";
+                    var localPath = $"{baseUrl}/uploads/{fileName}";
+
+                    _logger.LogInformation("Media downloaded and saved: {LocalPath}", localPath);
+
+                    return (localPath, fileName, fileBytes.Length);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error downloading media {MediaId}", mediaId);
+                    return (null, null, null);
+                }
+            }
 
             public async Task<string?> SaveMediaLocallyAsync(
                 byte[] fileBytes,
@@ -206,7 +294,7 @@ namespace DriverConnectApp.API.Services
                 }
             }
 
-            public string GetFileExtension(string mimeType) // ✅ Changed from private to public
+            public string GetFileExtension(string mimeType)
             {
                 return mimeType.ToLower() switch
                 {
@@ -220,15 +308,10 @@ namespace DriverConnectApp.API.Services
                     "audio/aac" => ".aac",
                     "audio/ogg" => ".ogg",
                     "application/pdf" => ".pdf",
-                    "application/msword" => ".doc",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
-                    "text/plain" => ".txt",
                     _ => ".bin"
                 };
             }
         }
-
-
 
         public async Task<object> SendMessageAsync(SendMessageRequest request, int teamId)
         {
@@ -338,7 +421,7 @@ namespace DriverConnectApp.API.Services
                         var messageId = idElement.GetString();
                         _logger.LogInformation("✅ WhatsApp text sent to {Phone}, Message ID: {MessageId}",
                             formattedPhone, messageId);
-                        return messageId;
+                        return messageId ?? string.Empty;
                     }
                 }
 
@@ -352,6 +435,7 @@ namespace DriverConnectApp.API.Services
                 return string.Empty;
             }
         }
+
         private async Task<string> GetTargetPhoneNumberAsync(SendMessageRequest request, int teamId)
         {
             if (!string.IsNullOrEmpty(request.PhoneNumber))
@@ -455,7 +539,7 @@ namespace DriverConnectApp.API.Services
                     request.DriverId, request.ConversationId);
 
                 // Get or create conversation
-                Conversation conversation = null;
+                Conversation? conversation = null;
 
                 if (request.ConversationId.HasValue)
                 {
@@ -597,7 +681,7 @@ namespace DriverConnectApp.API.Services
                 }
                 else if (!string.IsNullOrEmpty(request.MediaUrl))
                 {
-                    await SendMediaMessageAsync(phoneNumber, request.MediaUrl, messageType, team.Id, request.Content);
+                    await SendMediaFromUrlAsync(phoneNumber, request.MediaUrl, messageType, team.Id, request.Content);
                 }
                 else if (messageType == MessageType.Location && !string.IsNullOrEmpty(request.Location))
                 {
@@ -622,7 +706,7 @@ namespace DriverConnectApp.API.Services
             {
                 // Get current user
                 var currentUser = _httpContextAccessor.HttpContext?.User;
-                var currentUserId = currentUser?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var currentUserId = currentUser?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 var currentUserName = "Staff";
 
                 if (!string.IsNullOrEmpty(currentUserId))
@@ -632,7 +716,7 @@ namespace DriverConnectApp.API.Services
                 }
 
                 // Find or create conversation
-                Conversation conversation = null!;
+                Conversation? conversation = null;
 
                 if (request.ConversationId.HasValue)
                 {
@@ -774,11 +858,11 @@ namespace DriverConnectApp.API.Services
         }
 
         public async Task<string?> SendTemplateMessageAsync(
-    string to,
-    string templateName,
-    Dictionary<string, string> templateParameters,
-    int teamId,
-    string? languageCode = "en_US")
+            string to,
+            string templateName,
+            Dictionary<string, string> templateParameters,
+            int teamId,
+            string? languageCode = "en_US")
         {
             try
             {
@@ -837,20 +921,20 @@ namespace DriverConnectApp.API.Services
                 if (templateParameters != null && templateParameters.Any())
                 {
                     var components = new List<Dictionary<string, object>>
-            {
-                new Dictionary<string, object>
-                {
-                    ["type"] = "body",
-                    ["parameters"] = templateParameters
-                        .OrderBy(p => p.Key)
-                        .Select(p => new Dictionary<string, object>
+                    {
+                        new Dictionary<string, object>
                         {
-                            ["type"] = "text",
-                            ["text"] = p.Value
-                        })
-                        .ToList()
-                }
-            };
+                            ["type"] = "body",
+                            ["parameters"] = templateParameters
+                                .OrderBy(p => p.Key)
+                                .Select(p => new Dictionary<string, object>
+                                {
+                                    ["type"] = "text",
+                                    ["text"] = p.Value
+                                })
+                                .ToList()
+                        }
+                    };
 
                     ((Dictionary<string, object>)requestBody["template"])["components"] = components;
                 }
@@ -920,12 +1004,12 @@ namespace DriverConnectApp.API.Services
                 if (to.Contains("@c.us"))
                 {
                     // Already a WhatsApp ID, extract phone
-                    formattedPhone = PhoneNumberUtil.ExtractPhoneFromWhatsAppId(to);
+                    formattedPhone = PhoneNumberUtil.ExtractPhoneFromWhatsAppId(to) ?? string.Empty;
                 }
                 else
                 {
                     // Format using team's country code (default to India: 91)
-                    formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "91");
+                    formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "91") ?? string.Empty;
                 }
 
                 _logger.LogInformation("📤 Sending WhatsApp text: Original={Original}, Formatted={Formatted}, Team={TeamName}",
@@ -946,7 +1030,7 @@ namespace DriverConnectApp.API.Services
                 var json = JsonSerializer.Serialize(requestBody);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
                 var response = await _httpClient.PostAsync(url, content);
                 var responseContent = await response.Content.ReadAsStringAsync();
@@ -969,7 +1053,6 @@ namespace DriverConnectApp.API.Services
                 return false;
             }
         }
-
 
         public async Task<(bool Success, string? ErrorMessage, string? MediaUrl)> SendMediaMessageAsync(
             string to,
@@ -1002,7 +1085,7 @@ namespace DriverConnectApp.API.Services
                 }
 
                 // ✅ Step 1: Upload to WhatsApp Cloud API
-                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration, _httpContextAccessor);
                 var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
                     fileBytes, fileName, mimeType,
                     team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
@@ -1014,7 +1097,7 @@ namespace DriverConnectApp.API.Services
                 var localUrl = await mediaService.SaveMediaLocallyAsync(fileBytes, fileName, mimeType);
 
                 // ✅ Step 3: Send message with media_id (NOT link!)
-                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "44");
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "44") ?? string.Empty;
                 var url = $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/messages";
 
                 string whatsappMediaType = mediaType switch
@@ -1074,7 +1157,6 @@ namespace DriverConnectApp.API.Services
             }
         }
 
-
         public async Task<bool> SendMediaFromUrlAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
         {
             try
@@ -1109,16 +1191,12 @@ namespace DriverConnectApp.API.Services
             }
         }
 
-
         [Obsolete("Use SendMediaMessageAsync with byte array instead")]
         public async Task<bool> SendMediaMessageAsync(string to, string mediaUrl, MessageType mediaType, int teamId, string? caption = null)
         {
             _logger.LogWarning("⚠️ Using deprecated SendMediaMessageAsync with URL. Convert to byte array method.");
             return await SendMediaFromUrlAsync(to, mediaUrl, mediaType, teamId, caption);
         }
-
-
-
 
         public async Task<bool> SendGroupMessageAsync(string groupId, string messageText, string? mediaUrl, MessageType messageType, Team team)
         {
@@ -1160,7 +1238,7 @@ namespace DriverConnectApp.API.Services
                     var mimeType = downloadResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
 
                     // Upload media to WhatsApp
-                    var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                    var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration, _httpContextAccessor);
                     var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
                         fileBytes, fileName, mimeType,
                         team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
@@ -1266,10 +1344,11 @@ namespace DriverConnectApp.API.Services
                 var fileBytes = memoryStream.ToArray();
 
                 // Upload to WhatsApp
-                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration, _httpContextAccessor);
                 var mediaId = await mediaService.UploadMediaToWhatsAppAsync(
                     fileBytes, file.FileName, file.ContentType,
-                    team.WhatsAppPhoneNumberId, team.WhatsAppAccessToken);
+                    team.WhatsAppPhoneNumberId ?? string.Empty,
+                    team.WhatsAppAccessToken ?? string.Empty);
 
                 if (string.IsNullOrEmpty(mediaId))
                     return new MediaUploadResult { Success = false, Error = "Failed to upload to WhatsApp" };
@@ -1391,7 +1470,7 @@ namespace DriverConnectApp.API.Services
                 var json = JsonSerializer.Serialize(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
                 var response = await _httpClient.PostAsync(url, content);
 
@@ -1426,8 +1505,9 @@ namespace DriverConnectApp.API.Services
             if (string.IsNullOrEmpty(phoneNumberId))
                 return null;
 
-            return await _context.Teams
+            var team = await _context.Teams
                 .FirstOrDefaultAsync(t => t.WhatsAppPhoneNumberId == phoneNumberId && t.IsActive);
+            return team;
         }
 
         public async Task<List<Team>> GetAllTeams()
@@ -1533,7 +1613,6 @@ namespace DriverConnectApp.API.Services
                 throw;
             }
         }
-
 
         private async Task ProcessGroupMessage(IncomingMessage incomingMessage, Team team)
         {
@@ -1659,15 +1738,79 @@ namespace DriverConnectApp.API.Services
                 // ✅ EXTRACT MESSAGE DATA WITH MEDIA DOWNLOADING
                 var messageData = ExtractMessageData(incomingMessage, team);
 
+                string? mediaUrl = messageData.MediaUrl;
+                string? fileName = messageData.FileName;
+                long? fileSize = messageData.FileSize;
+
+                // Create WhatsAppMediaService instance
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration, _httpContextAccessor);
+
+                if (!string.IsNullOrEmpty(incomingMessage.Image?.Id))
+                {
+                    var result = await mediaService.DownloadAndStoreMediaAsync(
+                        incomingMessage.Image.Id,
+                        team.WhatsAppAccessToken,
+                        "image");
+
+                    if (result.LocalPath != null)
+                    {
+                        mediaUrl = result.LocalPath;
+                        fileName = result.FileName ?? "image.jpg";
+                        fileSize = result.FileSize;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Video?.Id))
+                {
+                    var result = await mediaService.DownloadAndStoreMediaAsync(
+                        incomingMessage.Video.Id,
+                        team.WhatsAppAccessToken,
+                        "video");
+
+                    if (result.LocalPath != null)
+                    {
+                        mediaUrl = result.LocalPath;
+                        fileName = result.FileName ?? "video.mp4";
+                        fileSize = result.FileSize;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Audio?.Id))
+                {
+                    var result = await mediaService.DownloadAndStoreMediaAsync(
+                        incomingMessage.Audio.Id,
+                        team.WhatsAppAccessToken,
+                        "audio");
+
+                    if (result.LocalPath != null)
+                    {
+                        mediaUrl = result.LocalPath;
+                        fileName = result.FileName ?? "audio.mp3";
+                        fileSize = result.FileSize;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(incomingMessage.Document?.Id))
+                {
+                    var result = await mediaService.DownloadAndStoreMediaAsync(
+                        incomingMessage.Document.Id,
+                        team.WhatsAppAccessToken,
+                        "document");
+
+                    if (result.LocalPath != null)
+                    {
+                        mediaUrl = result.LocalPath;
+                        fileName = incomingMessage.Document.Filename ?? result.FileName ?? "document.pdf";
+                        fileSize = result.FileSize;
+                    }
+                }
+
                 // Create message record
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
                     Content = messageData.Content,
                     MessageType = messageData.Type,
-                    MediaUrl = messageData.MediaUrl,
-                    FileName = messageData.FileName,
-                    FileSize = messageData.FileSize,
+                    MediaUrl = mediaUrl,
+                    FileName = fileName,
+                    FileSize = fileSize,
                     MimeType = messageData.MimeType,
                     Location = messageData.Location,
                     ContactName = messageData.ContactName,
@@ -1694,7 +1837,6 @@ namespace DriverConnectApp.API.Services
                 throw;
             }
         }
-
 
         private async Task<Conversation> GetOrCreateConversationForDriver(int driverId, int teamId, string topic)
         {
@@ -1815,6 +1957,12 @@ namespace DriverConnectApp.API.Services
                         var phoneNumberIdStr = phoneNumberId.GetString();
                         _logger.LogInformation("📱 Found phone number ID: {PhoneId}", phoneNumberIdStr);
 
+                        if (string.IsNullOrEmpty(phoneNumberIdStr))
+                        {
+                            _logger.LogWarning("⚠️ Phone number ID is empty");
+                            continue;
+                        }
+
                         var team = await GetTeamByPhoneNumberId(phoneNumberIdStr);
                         if (team == null)
                         {
@@ -1881,7 +2029,7 @@ namespace DriverConnectApp.API.Services
         }
 
         // ✅ FIXED: Added missing ProcessIncomingMessagesAsync method
-        private async Task ProcessIncomingMessagesAsync(JsonElement value, JsonElement messages)
+        private Task ProcessIncomingMessagesAsync(JsonElement value, JsonElement messages)
         {
             try
             {
@@ -1890,69 +2038,40 @@ namespace DriverConnectApp.API.Services
                     !metadata.TryGetProperty("phone_number_id", out var phoneNumberId))
                 {
                     _logger.LogError("No phone number ID found in webhook metadata");
-                    return;
+                    return Task.CompletedTask;
                 }
 
                 var phoneNumberIdStr = phoneNumberId.GetString();
                 if (string.IsNullOrEmpty(phoneNumberIdStr))
                 {
                     _logger.LogError("Phone number ID is empty");
-                    return;
+                    return Task.CompletedTask;
                 }
 
-                // Find team by phone number ID
-                var team = await GetTeamByPhoneNumberId(phoneNumberIdStr);
-                if (team == null)
-                {
-                    _logger.LogError("Team not found for phone number ID: {PhoneNumberId}", phoneNumberIdStr);
-                    return;
-                }
-
-                _logger.LogInformation("📨 Processing {Count} incoming messages for team {TeamName}",
-                    messages.GetArrayLength(), team.Name);
-
-                // Process each message
-                foreach (var msg in messages.EnumerateArray())
-                {
-                    try
-                    {
-                        // Parse incoming message
-                        var incomingMessage = JsonSerializer.Deserialize<IncomingMessage>(
-                            msg.GetRawText(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                        if (incomingMessage != null)
-                        {
-                            // ✅ FIX: Add await to fix CS1998 warning
-                            await ProcessIncomingMessage(incomingMessage, team.Id);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error processing individual message in webhook");
-                    }
-                }
+                return Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in ProcessIncomingMessagesAsync");
+                return Task.CompletedTask;
             }
         }
 
-        private async Task ProcessStatusUpdatesAsync(JsonElement value, JsonElement statuses)
+        private Task ProcessStatusUpdatesAsync(JsonElement value, JsonElement statuses)
         {
             try
             {
                 foreach (var status in statuses.EnumerateArray())
                 {
-                    // FIXED: Convert JsonElement to string instead of using dynamic
                     var statusJson = status.GetRawText();
                     _logger.LogInformation("📊 Status update: {Status}", statusJson);
                 }
+                return Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing status updates");
+                return Task.CompletedTask;
             }
         }
 
@@ -2101,38 +2220,22 @@ namespace DriverConnectApp.API.Services
                 mediaUrl = incomingMessage.Image.Link;
                 mimeType = incomingMessage.Image.MimeType;
                 fileName = "image.jpg";
-
-                // ✅ Try to download and save media
-                if (!string.IsNullOrEmpty(incomingMessage.Image.Id))
-                {
-                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Image.Id, team, "image", mimeType).Result;
-                }
             }
-            else if (incomingMessage.Video != null) // ✅ ADDED
+            else if (incomingMessage.Video != null)
             {
                 content = incomingMessage.Video.Caption ?? "Video";
                 type = MessageType.Video;
                 mediaUrl = incomingMessage.Video.Link;
                 mimeType = incomingMessage.Video.MimeType;
                 fileName = "video.mp4";
-
-                if (!string.IsNullOrEmpty(incomingMessage.Video.Id))
-                {
-                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Video.Id, team, "video", mimeType).Result;
-                }
             }
-            else if (incomingMessage.Audio != null) // ✅ ADDED
+            else if (incomingMessage.Audio != null)
             {
                 content = "Audio message";
                 type = MessageType.Audio;
                 mediaUrl = incomingMessage.Audio.Link;
                 mimeType = incomingMessage.Audio.MimeType;
                 fileName = "audio.mp3";
-
-                if (!string.IsNullOrEmpty(incomingMessage.Audio.Id))
-                {
-                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Audio.Id, team, "audio", mimeType).Result;
-                }
             }
             else if (incomingMessage.Document != null)
             {
@@ -2141,11 +2244,6 @@ namespace DriverConnectApp.API.Services
                 mediaUrl = incomingMessage.Document.Link;
                 fileName = incomingMessage.Document.Filename ?? "document.pdf";
                 mimeType = incomingMessage.Document.MimeType;
-
-                if (!string.IsNullOrEmpty(incomingMessage.Document.Id))
-                {
-                    mediaUrl = DownloadAndSaveWhatsAppMedia(incomingMessage.Document.Id, team, "document", mimeType).Result;
-                }
             }
             else if (incomingMessage.Location != null)
             {
@@ -2169,7 +2267,7 @@ namespace DriverConnectApp.API.Services
         {
             try
             {
-                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration);
+                var mediaService = new WhatsAppMediaService(_httpClient, _environment, _logger, _configuration, _httpContextAccessor);
 
                 var result = await mediaService.DownloadWhatsAppMediaAsync(
                     mediaId,
@@ -2183,8 +2281,8 @@ namespace DriverConnectApp.API.Services
                     return null;
                 }
 
-                // ✅ FIX: Use mediaService.GetFileExtension (now public)
-                var fileName = $"{Guid.NewGuid()}{mediaService.GetFileExtension(result.MimeType ?? originalMimeType ?? "application/octet-stream")}";
+                var extension = mediaService.GetFileExtension(result.MimeType ?? originalMimeType ?? "application/octet-stream");
+                var fileName = $"{Guid.NewGuid()}{extension}";
                 var localUrl = await mediaService.SaveMediaLocallyAsync(result.FileBytes, fileName, result.MimeType ?? originalMimeType ?? "application/octet-stream");
 
                 _logger.LogInformation("✅ Downloaded and saved WhatsApp media: {LocalUrl}", localUrl);
@@ -2196,8 +2294,6 @@ namespace DriverConnectApp.API.Services
                 return null;
             }
         }
-
-
 
         public string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters)
         {
@@ -2319,7 +2415,7 @@ namespace DriverConnectApp.API.Services
             public int MinutesRemaining { get; set; }
             public DateTime? LastInboundMessageAt { get; set; }
             public DateTime? WindowExpiresAt { get; set; }
-            public string Message { get; set; } = string.Empty; // Fixed: Initialize with default value
+            public string Message { get; set; } = string.Empty;
         }
     }
 }
