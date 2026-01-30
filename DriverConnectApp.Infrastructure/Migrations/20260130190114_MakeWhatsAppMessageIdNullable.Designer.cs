@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DriverConnectApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260123193126_MakeWhatsAppMessageIdNullable")]
+    [Migration("20260130190114_MakeWhatsAppMessageIdNullable")]
     partial class MakeWhatsAppMessageIdNullable
     {
         /// <inheritdoc />

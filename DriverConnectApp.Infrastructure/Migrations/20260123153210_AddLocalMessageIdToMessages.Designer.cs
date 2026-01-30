@@ -3,6 +3,7 @@ using System;
 using DriverConnectApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DriverConnectApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260123153210_AddLocalMessageIdToMessages")]
+    partial class AddLocalMessageIdToMessages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.8");
@@ -355,6 +358,9 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.Property<string>("JobId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LocalMessageId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Location")
                         .HasColumnType("TEXT");
 
@@ -415,6 +421,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("WhatsAppMessageId")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
