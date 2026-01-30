@@ -29,7 +29,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("ThreadsId");
 
-                    b.ToTable("ConversationThread");
+                    b.ToTable("ConversationThread", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Conversation", b =>
@@ -106,7 +106,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("Conversations");
+                    b.ToTable("Conversations", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Department", b =>
@@ -132,7 +132,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Depot", b =>
@@ -170,7 +170,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Depots");
+                    b.ToTable("Depots", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Driver", b =>
@@ -207,7 +207,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("Drivers");
+                    b.ToTable("Drivers", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Group", b =>
@@ -249,7 +249,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.HasIndex("WhatsAppGroupId")
                         .IsUnique();
 
-                    b.ToTable("Groups");
+                    b.ToTable("Groups", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.GroupParticipant", b =>
@@ -289,7 +289,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("GroupId");
 
-                    b.ToTable("GroupParticipants");
+                    b.ToTable("GroupParticipants", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Message", b =>
@@ -368,9 +368,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.Property<string>("MimeType")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("NextRetryAt")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("PinnedAt")
                         .HasColumnType("TEXT");
 
@@ -385,9 +382,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.Property<string>("ReplyToSenderName")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("RetryCount")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("SenderName")
                         .HasMaxLength(100)
@@ -410,9 +404,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("TeamId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("TemplateName")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
@@ -434,11 +425,9 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("ReplyToMessageId");
 
-                    b.HasIndex("TeamId");
-
                     b.HasIndex("ThreadId");
 
-                    b.ToTable("Messages");
+                    b.ToTable("Messages", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.MessageReaction", b =>
@@ -471,7 +460,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("MessageReactions");
+                    b.ToTable("MessageReactions", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.MessageRecipient", b =>
@@ -513,7 +502,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.ToTable("MessageRecipients");
+                    b.ToTable("MessageRecipients", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Team", b =>
@@ -570,7 +559,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Teams");
+                    b.ToTable("Teams", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.TeamConfiguration", b =>
@@ -620,7 +609,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.HasIndex("TeamId")
                         .IsUnique();
 
-                    b.ToTable("TeamConfigurations");
+                    b.ToTable("TeamConfigurations", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Domain.Entities.Thread", b =>
@@ -638,7 +627,7 @@ namespace DriverConnectApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Threads");
+                    b.ToTable("Threads", (string)null);
                 });
 
             modelBuilder.Entity("DriverConnectApp.Infrastructure.Identity.ApplicationUser", b =>
@@ -974,12 +963,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                         .HasForeignKey("ReplyToMessageId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("DriverConnectApp.Domain.Entities.Team", "Team")
-                        .WithMany()
-                        .HasForeignKey("TeamId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("DriverConnectApp.Domain.Entities.Thread", "Thread")
                         .WithMany("Messages")
                         .HasForeignKey("ThreadId");
@@ -989,8 +972,6 @@ namespace DriverConnectApp.Infrastructure.Migrations
                     b.Navigation("ForwardedFromMessage");
 
                     b.Navigation("ReplyToMessage");
-
-                    b.Navigation("Team");
 
                     b.Navigation("Thread");
                 });
