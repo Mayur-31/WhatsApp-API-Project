@@ -570,9 +570,21 @@
                         </p>
                         
                         <!-- Image metadata -->
-                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                          <span>{{ message.FileName || 'Image' }}</span>
-                          <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                        <div class="flex justify-between items-center mt-2 text-xs">
+                          <div class="flex items-center space-x-2 opacity-75">
+                            <span>{{ message.FileName || 'Image' }}</span>
+                            <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                          </div>
+                          <a 
+                            :href="getMediaUrl(message.MediaUrl)" 
+                            :download="message.FileName || 'image.jpg'"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs flex items-center space-x-1"
+                            @click.stop
+                            title="Download image"
+                          >
+                            <span>⬇️</span>
+                            <span>Download</span>
+                          </a>
                         </div>
                       </div>
                       
@@ -613,9 +625,21 @@
                           </video>
                         </div>
                         <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
-                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                          <span>{{ message.FileName || 'Video' }}</span>
-                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        <div class="flex justify-between items-center mt-2 text-xs">
+                          <div class="flex items-center space-x-2 opacity-75">
+                            <span>{{ message.FileName || 'Video' }}</span>
+                            <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                          </div>
+                          <a 
+                            :href="getMediaUrl(message.MediaUrl)" 
+                            :download="message.FileName || 'video.mp4'"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs flex items-center space-x-1"
+                            @click.stop
+                            title="Download video"
+                          >
+                            <span>⬇️</span>
+                            <span>Download</span>
+                          </a>
                         </div>
                       </div>
                       
@@ -656,9 +680,21 @@
                           </audio>
                         </div>
                         <p v-if="message.Content" class="text-sm break-words">{{ message.Content }}</p>
-                        <div class="flex justify-between items-center mt-1 text-xs opacity-75">
-                          <span>{{ message.FileName || 'Audio' }}</span>
-                          <span>{{ formatFileSize(message.FileSize) }}</span>
+                        <div class="flex justify-between items-center mt-2 text-xs">
+                          <div class="flex items-center space-x-2 opacity-75">
+                            <span>{{ message.FileName || 'Audio' }}</span>
+                            <span v-if="message.FileSize">{{ formatFileSize(message.FileSize) }}</span>
+                          </div>
+                          <a 
+                            :href="getMediaUrl(message.MediaUrl)" 
+                            :download="message.FileName || 'audio.mp3'"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs flex items-center space-x-1"
+                            @click.stop
+                            title="Download audio"
+                          >
+                            <span>⬇️</span>
+                            <span>Download</span>
+                          </a>
                         </div>
                       </div>
                       
@@ -698,7 +734,7 @@
                       
                       <!-- Text Message -->
                       <div v-else>
-                        <p class="text-sm break-words">{{ message.Content }}</p>
+                        <p class="text-sm break-words" v-html="renderMessageWithLinks(message.Content)"></p>
                       </div>
                       <button 
                         v-if="message.MessageType !== 'Text'"
@@ -1729,6 +1765,80 @@ const windowStatusPollInterval = ref<number | null>(null);
 
 const searchQuery = ref('');
 
+function renderMessageWithLinks(content: string) {
+  if (!content) return '';
+  
+  // URL regex pattern
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  
+  // Replace URLs with clickable links
+  return content.replace(urlPattern, (url) => {
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline" onclick="event.stopPropagation()">${url}</a>`;
+  });
+}
+
+// ✅ FIXED: Safe alternative (Option 1) - Array-based rendering
+function renderMessageContent(content: string) {
+  if (!content) return [];
+  
+  // Detect URLs
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlPattern.exec(content)) !== null) {
+    // Add text before URL
+    if (match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: content.substring(lastIndex, match.index)
+      });
+    }
+    
+    // Add URL
+    parts.push({
+      type: 'link',
+      content: match[0],
+      url: match[0]
+    });
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push({
+      type: 'text',
+      content: content.substring(lastIndex)
+    });
+  }
+  
+  return parts.length > 0 ? parts : [{ type: 'text', content }];
+}
+
+function getMediaUrl(url: string | undefined): string {
+  if (!url) return '';
+  
+  // If URL is already absolute, return as is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  
+  // If URL is relative, prepend base URL
+  const baseUrl = window.location.origin;
+  return url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+}
+
+// ✅ FIXED: Format file size
+function formatFileSize(bytes: number | undefined): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
 const closeDropdownOnClickOutside = (event) => {
   if (!event.target.closest('.action-dropdown-container')) {
     showActionsDropdown.value = false;
@@ -2570,29 +2680,7 @@ const preloadAudio = (message: MessageDto) => {
   }
 };
 
-const getMediaUrl = (url: string | undefined): string => {
-  if (!url) return '';
-  
-  // If it's already a full URL (starting with http), use it directly
-  if (url.startsWith('http')) {
-    // Check if it's a WhatsApp temporary URL - if yes, return empty
-    if (url.includes('whatsapp.net') || url.includes('fbsbx.com') || url.includes('facebook.com')) {
-      console.warn('WhatsApp temporary URL detected, skipping:', url);
-      return '';
-    }
-    return url;
-  }
-  
-  // If it's a relative path, prepend base URL
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
-  
-  // Ensure proper formatting
-  if (url.startsWith('/')) {
-    return `${baseUrl}${url}`;
-  } else {
-    return `${baseUrl}/${url}`;
-  }
-};
+
 
 const downloadMedia = async (message: MessageDto) => {
   try {
@@ -3450,14 +3538,7 @@ const formatMessageTime = (dateString: string) => {
   });
 };
 
-const formatFileSize = (bytes: number | undefined) => {
-  if (!bytes) return 'Unknown size';
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
+
 
 const sendQuickReply = (reply: string) => {
   if (!selectedConversation.value) return;
@@ -3878,6 +3959,8 @@ const updateMessageStatus = async (message: MessageDto, status: string) => {
   }
 };
 
+
+
 const simulateMessageStatus = (message: MessageDto) => {
   if (message.IsFromDriver || message.Status === 'Read') return;
 
@@ -4265,4 +4348,32 @@ button {
 .to-green-600 {
   --tw-gradient-to: #16a34a;
 }
+
+.text-blue-600 {
+  color: #2563eb;
+}
+
+.text-blue-600:hover {
+  color: #1d4ed8;
+}
+
+.underline {
+  text-decoration: underline;
+}
+
+/* Ensure links are properly spaced */
+.text-sm.break-words a {
+  word-break: break-all;
+  margin: 0 2px;
+}
+
+/* Download button styling */
+.bg-blue-500 {
+  background-color: #3b82f6;
+}
+
+.bg-blue-500:hover {
+  background-color: #2563eb;
+}
+
 </style>

@@ -271,13 +271,13 @@ namespace DriverConnectApp.API.Controllers
                 return BadRequest(new { message = "Could not find or create conversation" });
 
             // ✅ FIXED: Generate WhatsApp Message ID if not provided
+            
             var whatsAppMessageId = request.WhatsAppMessageId;
             if (string.IsNullOrEmpty(whatsAppMessageId))
             {
                 var prefix = request.IsTemplateMessage ? "template" : "web";
                 whatsAppMessageId = $"{prefix}_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
             }
-
             // Handle reply functionality
             Message? replyToMessage = null;
             if (request.ReplyToMessageId.HasValue)
@@ -294,32 +294,48 @@ namespace DriverConnectApp.API.Controllers
             }
 
             // Normalize MediaUrl to absolute URL
+            
             string? mediaUrl = request.MediaUrl;
             if (!string.IsNullOrEmpty(mediaUrl) && !mediaUrl.StartsWith("http"))
             {
                 var baseUrl = $"{Request.Scheme}://{Request.Host}";
                 mediaUrl = mediaUrl.StartsWith("/") ? $"{baseUrl}{mediaUrl}" : $"{baseUrl}/{mediaUrl}";
             }
-
             // ✅ FIXED: Create proper message content for template messages
             string messageContent;
             MessageType messageTypeEnum;
 
             if (request.IsTemplateMessage)
             {
-                // ✅ CRITICAL: Get the ACTUAL template content from WhatsAppService
                 messageContent = _whatsAppService.RenderTemplateForDisplay(
                     request.TemplateName ?? string.Empty,
                     request.TemplateParameters);
-
-                messageTypeEnum = MessageType.Text; // ✅ Display as regular text
-
+                messageTypeEnum = MessageType.Text;
                 _logger.LogInformation("📋 Template content saved: {TemplateName} -> {Content}",
                     request.TemplateName, messageContent);
             }
             else
             {
                 messageContent = request.Content ?? string.Empty;
+
+                // ✅ FIX: Auto-detect media type from extension if content is generic
+                if (!string.IsNullOrEmpty(mediaUrl) &&
+                    (string.IsNullOrWhiteSpace(messageContent) || messageContent.Contains("Sent a ")))
+                {
+                    var extension = Path.GetExtension(mediaUrl)?.ToLower();
+                    if (!string.IsNullOrEmpty(extension))
+                    {
+                        request.MessageType = extension switch
+                        {
+                            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" => "Image",
+                            ".mp4" or ".avi" or ".mov" or ".wmv" or ".flv" or ".webm" or ".mkv" or ".3gp" => "Video",
+                            ".mp3" or ".wav" or ".ogg" or ".m4a" or ".aac" or ".flac" => "Audio",
+                            ".pdf" or ".doc" or ".docx" or ".txt" or ".rtf" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "Document",
+                            _ => "Document"
+                        };
+                    }
+                }
+
                 if (!Enum.TryParse<MessageType>(request.MessageType, out messageTypeEnum))
                 {
                     messageTypeEnum = MessageType.Text;
@@ -331,8 +347,8 @@ namespace DriverConnectApp.API.Controllers
             {
                 ConversationId = conversation.Id,
                 Content = messageContent,
-                MessageType = messageTypeEnum, // ✅ Use the correct variable
-                MediaUrl = request.MediaUrl,
+                MessageType = messageTypeEnum,
+                MediaUrl = mediaUrl,
                 FileName = request.FileName,
                 FileSize = request.FileSize,
                 MimeType = request.MimeType,
@@ -352,7 +368,7 @@ namespace DriverConnectApp.API.Controllers
                 TemplateParametersJson = request.TemplateParameters != null
                     ? JsonSerializer.Serialize(request.TemplateParameters)
                     : null,
-                Status = MessageStatus.Sent
+                Status = MessageStatus.Pending // ✅ Start as pending
             };
 
             _context.Messages.Add(message);
@@ -360,6 +376,7 @@ namespace DriverConnectApp.API.Controllers
 
             // ✅ CRITICAL: Save IMMEDIATELY so frontend gets the message
             await _context.SaveChangesAsync();
+            
 
             // Send to WhatsApp service if not from driver
             if (!request.IsFromDriver && !request.IsTemplateMessage) // ✅ FIX: Don't send templates here
