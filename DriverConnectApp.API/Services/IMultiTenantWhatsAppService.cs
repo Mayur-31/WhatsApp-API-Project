@@ -30,6 +30,9 @@ namespace DriverConnectApp.API.Services
 
         Task<string?> SendTemplateMessageAsync(string to, string templateName,
             Dictionary<string, string> templateParameters, int teamId, string? languageCode = "en_US");
+
+        Task<bool> ProcessQueuedMessageAsync(int messageId, int teamId);
+        
         string RenderTemplateForDisplay(string templateName, Dictionary<string, string>? parameters);
 
 

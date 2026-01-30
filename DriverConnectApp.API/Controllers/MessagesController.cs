@@ -27,7 +27,7 @@ namespace DriverConnectApp.API.Controllers
         private readonly IWebHostEnvironment _environment;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IMultiTenantWhatsAppService _whatsAppService;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IMessageQueueService _messageQueueService;
 
         private const long MAX_IMAGE_UPLOAD = 100L * 1024 * 1024;
         private const long MAX_VIDEO_UPLOAD = 500L * 1024 * 1024;
@@ -45,20 +45,18 @@ namespace DriverConnectApp.API.Controllers
             IWebHostEnvironment environment,
             UserManager<ApplicationUser> userManager,
             IMultiTenantWhatsAppService whatsAppService,
-            IServiceProvider serviceProvider)
+            IMessageQueueService messageQueueService)
         {
             _logger = logger;
             _context = context;
             _environment = environment;
             _userManager = userManager;
             _whatsAppService = whatsAppService;
-            _serviceProvider = serviceProvider;
+            _messageQueueService = messageQueueService;
         }
 
-
-
         [HttpPost]
-        [RequestSizeLimit(524288000)]
+        [RequestSizeLimit(524288000)] // 500MB
         public async Task<IActionResult> SendMessage([FromBody] MessageRequest request)
         {
             try
@@ -90,8 +88,6 @@ namespace DriverConnectApp.API.Controllers
                     {
                         return BadRequest(new { message = "TemplateName is required for template messages" });
                     }
-
-                    // Validate 24-hour window is NOT required for templates
                     _logger.LogInformation("✅ Template message - bypassing 24-hour window check");
                 }
                 else if (string.IsNullOrWhiteSpace(request.Content) && request.MessageType == "Text")
@@ -132,7 +128,6 @@ namespace DriverConnectApp.API.Controllers
                 return StatusCode(500, new { message = "Failed to send message", error = ex.Message });
             }
         }
-
 
         private async Task<MessageDto> MapMessageToDto(Message message)
         {
@@ -183,11 +178,12 @@ namespace DriverConnectApp.API.Controllers
 
             return dto;
         }
+
         private async Task<IActionResult> HandleIndividualMessage(
-    MessageRequest request,
-    ApplicationUser? currentUser,
-    string currentUserName,
-    string? currentUserId)
+            MessageRequest request,
+            ApplicationUser? currentUser,
+            string currentUserName,
+            string? currentUserId)
         {
             // Validate required fields for individual messages
             if (!request.DriverId.HasValue && !request.ConversationId.HasValue && string.IsNullOrEmpty(request.PhoneNumber))
@@ -270,14 +266,14 @@ namespace DriverConnectApp.API.Controllers
             if (conversation == null)
                 return BadRequest(new { message = "Could not find or create conversation" });
 
-            // ✅ FIXED: Generate WhatsApp Message ID if not provided
-            
+            // ✅ Generate WhatsApp Message ID if not provided
             var whatsAppMessageId = request.WhatsAppMessageId;
             if (string.IsNullOrEmpty(whatsAppMessageId))
             {
                 var prefix = request.IsTemplateMessage ? "template" : "web";
                 whatsAppMessageId = $"{prefix}_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
             }
+
             // Handle reply functionality
             Message? replyToMessage = null;
             if (request.ReplyToMessageId.HasValue)
@@ -294,14 +290,14 @@ namespace DriverConnectApp.API.Controllers
             }
 
             // Normalize MediaUrl to absolute URL
-            
             string? mediaUrl = request.MediaUrl;
             if (!string.IsNullOrEmpty(mediaUrl) && !mediaUrl.StartsWith("http"))
             {
                 var baseUrl = $"{Request.Scheme}://{Request.Host}";
                 mediaUrl = mediaUrl.StartsWith("/") ? $"{baseUrl}{mediaUrl}" : $"{baseUrl}/{mediaUrl}";
             }
-            // ✅ FIXED: Create proper message content for template messages
+
+            // ✅ Create proper message content for template messages
             string messageContent;
             MessageType messageTypeEnum;
 
@@ -318,7 +314,7 @@ namespace DriverConnectApp.API.Controllers
             {
                 messageContent = request.Content ?? string.Empty;
 
-                // ✅ FIX: Auto-detect media type from extension if content is generic
+                // ✅ Auto-detect media type from extension if content is generic
                 if (!string.IsNullOrEmpty(mediaUrl) &&
                     (string.IsNullOrWhiteSpace(messageContent) || messageContent.Contains("Sent a ")))
                 {
@@ -341,6 +337,9 @@ namespace DriverConnectApp.API.Controllers
                     messageTypeEnum = MessageType.Text;
                 }
             }
+
+            // ✅ Set initial status based on message type
+            var initialStatus = request.IsTemplateMessage ? MessageStatus.Pending : MessageStatus.Queued;
 
             // Create message with all details
             var message = new Message
@@ -368,7 +367,9 @@ namespace DriverConnectApp.API.Controllers
                 TemplateParametersJson = request.TemplateParameters != null
                     ? JsonSerializer.Serialize(request.TemplateParameters)
                     : null,
-                Status = MessageStatus.Pending // ✅ Start as pending
+                Status = initialStatus, // ✅ Use new status
+                RetryCount = 0,
+                NextRetryAt = DateTime.UtcNow
             };
 
             _context.Messages.Add(message);
@@ -376,91 +377,57 @@ namespace DriverConnectApp.API.Controllers
 
             // ✅ CRITICAL: Save IMMEDIATELY so frontend gets the message
             await _context.SaveChangesAsync();
-            
 
-            // Send to WhatsApp service if not from driver
-            if (!request.IsFromDriver && !request.IsTemplateMessage) // ✅ FIX: Don't send templates here
+            // ✅ NEW: Handle message sending based on type
+            if (!request.IsFromDriver)
             {
                 var teamId = conversation.TeamId ?? request.TeamId ?? 1;
 
-                var sendRequest = new SendMessageRequest
+                if (request.IsTemplateMessage)
                 {
-                    Content = messageContent,
-                    MessageType = messageTypeEnum.ToString(),
-                    MediaUrl = request.MediaUrl,
-                    FileName = request.FileName,
-                    FileSize = request.FileSize,
-                    MimeType = request.MimeType,
-                    Location = request.Location,
-                    DriverId = conversation.DriverId,
-                    ConversationId = conversation.Id,
-                    IsFromDriver = false,
-                    IsTemplateMessage = request.IsTemplateMessage,
-                    TemplateName = request.TemplateName,
-                    TemplateParameters = request.TemplateParameters,
-                    TeamId = teamId,
-                    Topic = request.Topic,
-                    PhoneNumber = conversation.Driver?.PhoneNumber ?? request.PhoneNumber,
-                    LanguageCode = request.LanguageCode ?? "en_US",
-                    WhatsAppMessageId = whatsAppMessageId
-                };
-
-                // ✅ Run in background for regular messages ONLY
-                _ = Task.Run(async () =>
-                {
-                    try
+                    // ✅ Handle template message immediately
+                    var targetPhone = conversation.Driver?.PhoneNumber ?? request.PhoneNumber;
+                    if (!string.IsNullOrEmpty(targetPhone))
                     {
-                        using (var scope = _serviceProvider.CreateScope())
-                        {
-                            var scopedWhatsAppService = scope.ServiceProvider
-                                .GetRequiredService<IMultiTenantWhatsAppService>();
+                        _logger.LogInformation("🚀 Sending template via WhatsApp: {Template}", request.TemplateName);
 
-                            await scopedWhatsAppService.SendMessageAsync(sendRequest, teamId);
-                            _logger.LogInformation("✅ WhatsApp message sent: {MessageId}", message.Id);
+                        var templateSuccess = await _whatsAppService.SendTemplateMessageAsync(
+                            targetPhone,
+                            request.TemplateName!,
+                            request.TemplateParameters ?? new Dictionary<string, string>(),
+                            teamId,
+                            request.LanguageCode ?? "en_US"
+                        );
+
+                        if (!string.IsNullOrEmpty(templateSuccess))
+                        {
+                            // ✅ Update message with WhatsApp ID
+                            message.WhatsAppMessageId = templateSuccess;
+                            message.Status = MessageStatus.Sent;
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation("✅ Template sent successfully: {Template}", request.TemplateName);
+                        }
+                        else
+                        {
+                            // ❌ WhatsApp failed - update message status
+                            message.Status = MessageStatus.Failed;
+                            await _context.SaveChangesAsync();
+                            _logger.LogError("❌ WhatsApp template sending failed: {Template}", request.TemplateName);
+
+                            return StatusCode(500, new
+                            {
+                                message = "Failed to send template via WhatsApp. Check logs.",
+                                templateName = request.TemplateName,
+                                success = false
+                            });
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "❌ Failed to send via WhatsApp: {MessageId}", message.Id);
-                    }
-                });
-            }
-            else if (!request.IsFromDriver && request.IsTemplateMessage)
-            {
-                // ✅ FIX: Send template IMMEDIATELY and check success BEFORE returning
-                var teamId = conversation.TeamId ?? request.TeamId ?? 1;
-                var targetPhone = conversation.Driver?.PhoneNumber ?? request.PhoneNumber;
-
-                if (!string.IsNullOrEmpty(targetPhone))
+                }
+                else
                 {
-                    _logger.LogInformation("🚀 Sending template via WhatsApp: {Template}", request.TemplateName);
-
-                    var templateSuccess = await _whatsAppService.SendTemplateMessageAsync(
-                        targetPhone,
-                        request.TemplateName!,
-                        request.TemplateParameters ?? new Dictionary<string, string>(),
-                        teamId,
-                        request.LanguageCode ?? "en_US"
-                    );
-
-                    if (string.IsNullOrEmpty(templateSuccess))
-                    {
-                        // ❌ WhatsApp failed - update message status
-                        message.Status = MessageStatus.Failed;
-                        await _context.SaveChangesAsync();
-
-                        _logger.LogError("❌ WhatsApp template sending failed: {Template}", request.TemplateName);
-
-                        // Return error to frontend
-                        return StatusCode(500, new
-                        {
-                            message = "Failed to send template via WhatsApp. Check logs.",
-                            templateName = request.TemplateName,
-                            success = false
-                        });
-                    }
-
-                    _logger.LogInformation("✅ Template sent successfully: {Template}", request.TemplateName);
+                    // ✅ Enqueue regular message for background processing
+                    await _messageQueueService.EnqueueMessageAsync(message.Id, teamId);
+                    _logger.LogInformation("✅ Message {MessageId} queued for processing", message.Id);
                 }
             }
 
@@ -537,7 +504,10 @@ namespace DriverConnectApp.API.Controllers
                     TemplateName = request.TemplateName,
                     TemplateParametersJson = request.TemplateParameters != null
                         ? JsonSerializer.Serialize(request.TemplateParameters)
-                        : null
+                        : null,
+                    Status = MessageStatus.Queued, // ✅ Queue group messages too
+                    RetryCount = 0,
+                    NextRetryAt = DateTime.UtcNow
                 };
 
                 _context.Messages.Add(message);
@@ -545,27 +515,9 @@ namespace DriverConnectApp.API.Controllers
 
                 var teamId = conversation.TeamId ?? 1;
 
-                var sendRequest = new SendMessageRequest
-                {
-                    Content = request.Content,
-                    MessageType = request.MessageType,
-                    MediaUrl = mediaUrl,
-                    FileName = request.FileName,
-                    FileSize = request.FileSize,
-                    MimeType = request.MimeType,
-                    Location = request.Location,
-                    ConversationId = conversation.Id,
-                    IsGroupMessage = true,
-                    GroupId = request.GroupId,
-                    IsFromDriver = false,
-                    IsTemplateMessage = request.IsTemplateMessage,
-                    TemplateName = request.TemplateName,
-                    TemplateParameters = request.TemplateParameters,
-                    TeamId = teamId,
-                    Topic = request.Topic
-                };
-
-                await _whatsAppService.SendMessageAsync(sendRequest, teamId);
+                // ✅ Enqueue group message for background processing
+                await _messageQueueService.EnqueueMessageAsync(message.Id, teamId);
+                _logger.LogInformation("✅ Group message {MessageId} queued for processing", message.Id);
 
                 await _context.SaveChangesAsync();
 
@@ -594,7 +546,8 @@ namespace DriverConnectApp.API.Controllers
                     ReplyToMessageContent = message.ReplyToMessageContent,
                     ReplyToSenderName = message.ReplyToSenderName,
                     IsTemplateMessage = message.IsTemplateMessage,
-                    TemplateName = message.TemplateName
+                    TemplateName = message.TemplateName,
+                    Status = message.Status.ToString()
                 };
 
                 _logger.LogInformation("Group message sent successfully to group: {GroupId}", request.GroupId);
@@ -605,6 +558,44 @@ namespace DriverConnectApp.API.Controllers
             {
                 _logger.LogError(ex, "Error handling group message");
                 return StatusCode(500, new { message = "Failed to send group message", error = ex.Message });
+            }
+        }
+
+        // ✅ ADDED: Method to manually process queued messages (for testing)
+        [HttpPost("process/{messageId}")]
+        public async Task<IActionResult> ProcessQueuedMessage(int messageId)
+        {
+            try
+            {
+                _logger.LogInformation("🔄 Manually processing queued message {MessageId}", messageId);
+
+                var message = await _context.Messages.FindAsync(messageId);
+                if (message == null)
+                    return NotFound(new { message = "Message not found" });
+
+                var conversation = await _context.Conversations
+                    .Include(c => c.Driver)
+                    .FirstOrDefaultAsync(c => c.Id == message.ConversationId);
+
+                if (conversation == null)
+                    return BadRequest(new { message = "Conversation not found" });
+
+                var teamId = conversation.TeamId ?? 1;
+
+                // Process the message immediately
+                var success = await _whatsAppService.ProcessQueuedMessageAsync(messageId, teamId);
+
+                return Ok(new
+                {
+                    success = success,
+                    message = success ? "Message processed successfully" : "Message processing failed",
+                    messageId = messageId
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error manually processing message {MessageId}", messageId);
+                return StatusCode(500, new { message = "Failed to process message", error = ex.Message });
             }
         }
 
@@ -814,7 +805,9 @@ namespace DriverConnectApp.API.Controllers
                         SenderPhoneNumber = "System",
                         SentByUserId = currentUser?.Id,
                         SentByUserName = currentUser?.FullName ?? "Staff",
-                        Status = MessageStatus.Sent
+                        Status = MessageStatus.Queued, // ✅ Queue forwarded messages
+                        RetryCount = 0,
+                        NextRetryAt = DateTime.UtcNow
                     };
 
                     _context.Messages.Add(forwardedMessage);
@@ -826,6 +819,9 @@ namespace DriverConnectApp.API.Controllers
                     originalMessage.ForwardCount += 1;
 
                     await _context.SaveChangesAsync();
+
+                    // ✅ Enqueue forwarded message for processing
+                    await _messageQueueService.EnqueueMessageAsync(forwardedMessage.Id, conversation.TeamId ?? 1);
 
                     _logger.LogInformation("✅ Successfully forwarded message to conversation {ConversationId} as message {ForwardedMessageId}",
                         conversationId, forwardedMessage.Id);
@@ -1339,37 +1335,6 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
-        private string GenerateTemplateContent(string templateName, Dictionary<string, string> parameters)
-        {
-            if (parameters == null || !parameters.Any())
-                return $"Template: {templateName}";
-
-            // Get parameter values in order
-            var paramValues = parameters
-                .OrderBy(p => p.Key)
-                .Select(p => p.Value)
-                .ToList();
-
-            // Map template names to actual content
-            return templateName.ToLower() switch
-            {
-                "hello_world" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, welcome to our service!",
-                "welcome_message" when paramValues.Count >= 2 => $"Welcome {paramValues[0]} to {paramValues[1]}!",
-                "booking_confirmation" when paramValues.Count >= 3 => $"Your booking #{paramValues[0]} is confirmed for {paramValues[1]} at {paramValues[2]}.",
-                "payment_reminder" when paramValues.Count >= 3 => $"Hello {paramValues[0]}, please pay {paramValues[1]} by {paramValues[2]}.",
-                "order_shipped" when paramValues.Count >= 2 => $"Your order #{paramValues[0]} has been shipped. Tracking: {paramValues[1]}",
-                "delivery_update" when paramValues.Count >= 2 => $"Your delivery #{paramValues[0]} is on the way. ETA: {paramValues[1]}",
-                "appointment_reminder" when paramValues.Count >= 3 => $"Reminder: Your appointment with {paramValues[0]} is on {paramValues[1]} at {paramValues[2]}.",
-                "service_completed" when paramValues.Count >= 2 => $"Service #{paramValues[0]} has been completed. {paramValues[1]}",
-                "invoice_sent" when paramValues.Count >= 3 => $"Invoice #{paramValues[0]} for {paramValues[1]} has been sent. Amount: {paramValues[2]}",
-                "feedback_request" when paramValues.Count >= 1 => $"Hello {paramValues[0]}, we'd love your feedback on our service!",
-
-                // Add more templates as needed
-
-                _ => $"{templateName}: {string.Join(", ", paramValues)}"
-            };
-        }
-
         private async Task<CompressionResult> CompressImageAsync(IFormFile file, string outputPath, long targetSize)
         {
             using var inputStream = file.OpenReadStream();
@@ -1555,13 +1520,28 @@ namespace DriverConnectApp.API.Controllers
                 if (conversation == null)
                     return NotFound(new { message = "Conversation not found" });
 
-                bool canSendNonTemplate = conversation.CanSendNonTemplateMessages();
+                // Check if conversation has any inbound messages
+                var hasInboundMessages = await _context.Messages
+                    .AnyAsync(m => m.ConversationId == conversationId && m.IsFromDriver);
+
+                var lastInboundMessage = await _context.Messages
+                    .Where(m => m.ConversationId == conversationId && m.IsFromDriver)
+                    .OrderByDescending(m => m.SentAt)
+                    .FirstOrDefaultAsync();
+
+                bool canSendNonTemplate = false;
+                if (lastInboundMessage != null)
+                {
+                    var timeSinceLastInbound = DateTime.UtcNow - lastInboundMessage.SentAt;
+                    canSendNonTemplate = timeSinceLastInbound.TotalHours < 24;
+                }
 
                 return Ok(new
                 {
                     conversationId,
                     canSendNonTemplateMessages = canSendNonTemplate,
-                    lastInboundMessageAt = conversation.LastInboundMessageAt,
+                    lastInboundMessageAt = lastInboundMessage?.SentAt,
+                    hasInboundMessages = hasInboundMessages,
                     requiresTemplate = !canSendNonTemplate
                 });
             }
@@ -1572,11 +1552,10 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
-
         private async Task UpdateMessageWithWhatsAppId(
-    string phoneNumber,
-    string templateName,
-    string whatsAppMessageId)
+            string phoneNumber,
+            string templateName,
+            string whatsAppMessageId)
         {
             // Find recent template message without WhatsApp ID
             var message = await _context.Messages
@@ -1681,8 +1660,6 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
-
-
         private async Task<string?> SaveMediaLocallyAsync(byte[] fileBytes, string fileName, string mimeType)
         {
             try
@@ -1708,7 +1685,7 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
-        // NEW: Send template message endpoint - USE EXISTING MODEL FROM WHATSAPP CONTROLLER
+        // NEW: Send template message endpoint
         [HttpPost("send-template")]
         public async Task<IActionResult> SendTemplateMessage([FromBody] SendTemplateByDriverIdRequest request)
         {
@@ -1751,7 +1728,6 @@ namespace DriverConnectApp.API.Controllers
                 var currentUserId = currentUser?.Id;
 
                 // ✅ CRITICAL FIX: Get the ACTUAL template content for storage
-                // Render the template for display BEFORE sending to WhatsApp
                 var renderedContent = _whatsAppService.RenderTemplateForDisplay(
                     request.TemplateName,
                     request.TemplateParameters ?? new Dictionary<string, string>());
@@ -1776,8 +1752,8 @@ namespace DriverConnectApp.API.Controllers
                 var message = new Message
                 {
                     ConversationId = conversation.Id,
-                    Content = renderedContent, // ✅ This is what will display in the UI
-                    MessageType = MessageType.Text, // ✅ Use Text type so it displays properly
+                    Content = renderedContent,
+                    MessageType = MessageType.Text,
                     IsFromDriver = false,
                     IsGroupMessage = false,
                     SenderPhoneNumber = "System",
@@ -1807,7 +1783,7 @@ namespace DriverConnectApp.API.Controllers
                     conversationId = conversation.Id,
                     isTemplate = true,
                     whatsAppMessageId = message.WhatsAppMessageId,
-                    displayContent = renderedContent, // ✅ Return actual content
+                    displayContent = renderedContent,
                     templateName = request.TemplateName,
                     templateParameters = request.TemplateParameters
                 });
@@ -1819,9 +1795,6 @@ namespace DriverConnectApp.API.Controllers
             }
         }
     }
-
-
-
 
     public class CompressionResult
     {

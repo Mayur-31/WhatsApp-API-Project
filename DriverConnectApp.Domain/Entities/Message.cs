@@ -29,6 +29,11 @@ namespace DriverConnectApp.Domain.Entities
         public int ConversationId { get; set; }
         public Conversation Conversation { get; set; } = null!;
 
+        // Team relationship - ADDED to fix the error
+        public int TeamId { get; set; }
+        [ForeignKey("TeamId")]
+        public Team Team { get; set; } = null!;
+
         // Basic message info
         public bool IsFromDriver { get; set; }
         public DateTime SentAt { get; set; } = DateTime.UtcNow;
@@ -41,6 +46,9 @@ namespace DriverConnectApp.Domain.Entities
 
         // WhatsApp identifiers
         public string? WhatsAppMessageId { get; set; }
+
+        public int RetryCount { get; set; } = 0;
+        public DateTime? NextRetryAt { get; set; }
 
         // Thread relationship
         public int? ThreadId { get; set; }
@@ -104,6 +112,7 @@ namespace DriverConnectApp.Domain.Entities
 
     public enum MessageStatus
     {
+        Queued = 0,
         Sent = 1,
         Delivered = 2,
         Read = 3,

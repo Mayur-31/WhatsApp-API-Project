@@ -24,6 +24,9 @@ builder.Services.AddSwaggerGen();
 // ADD THIS: HttpClient factory registration
 builder.Services.AddHttpClient();
 
+builder.Services.AddSingleton<IMessageQueueService, MessageQueueService>();
+builder.Services.AddHostedService<WhatsAppBackgroundService>();
+
 // ADD THIS: HttpContextAccessor for accessing current user in services
 builder.Services.AddHttpContextAccessor();
 
