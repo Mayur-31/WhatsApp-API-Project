@@ -80,11 +80,11 @@ namespace DriverConnectApp.API.Services
             }
 
             public async Task<string?> UploadMediaToWhatsAppAsync(
-       byte[] fileBytes,
-       string fileName,
-       string mimeType,
-       string phoneNumberId,
-       string accessToken)
+   byte[] fileBytes,
+   string fileName,
+   string mimeType,
+   string phoneNumberId,
+   string accessToken)
             {
                 try
                 {
@@ -98,7 +98,7 @@ namespace DriverConnectApp.API.Services
                     fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
                     form.Add(fileContent, "file", fileName);
                     form.Add(new StringContent(mimeType), "type");
-                    form.Add(new StringContent("media"), "messaging_product");
+                    form.Add(new StringContent("whatsapp"), "messaging_product"); // ✅ FIXED: Changed from "media" to "whatsapp"
 
                     mediaHttpClient.DefaultRequestHeaders.Authorization =
                         new AuthenticationHeaderValue("Bearer", accessToken);
