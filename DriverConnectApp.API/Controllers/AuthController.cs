@@ -5,6 +5,8 @@ using DriverConnectApp.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using DriverConnectApp.API.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DriverConnectApp.API.Controllers
 {
@@ -16,17 +18,20 @@ namespace DriverConnectApp.API.Controllers
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly AppDbContext _context;
         private readonly ILogger<AuthController> _logger;
+        private readonly IEmailService _emailService;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             AppDbContext context,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            IEmailService emailService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _context = context; // Add this line
             _logger = logger;
+            _emailService = emailService;
         }
 
         [HttpPost("login")]
@@ -253,25 +258,163 @@ namespace DriverConnectApp.API.Controllers
         }
 
         [HttpPost("forgot-password")]
+        [AllowAnonymous]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
             try
             {
+                _logger.LogInformation("Password reset requested for: {Email}", request.Email);
+
                 var user = await _userManager.FindByEmailAsync(request.Email);
-                if (user == null)
+
+                // Security: Always return same message to prevent email enumeration
+                if (user == null || !user.IsActive)
                 {
-                    // Don't reveal that the user doesn't exist
+                    _logger.LogInformation("Password reset requested for non-existent/inactive: {Email}", request.Email);
                     return Ok(new { success = true, message = "If your email is registered, you will receive a password reset link." });
                 }
 
-                // TODO: Implement password reset logic here
-                // For now, just return success
+                // Generate password reset token (ASP.NET Identity handles expiration)
+                var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+                _logger.LogDebug("Generated reset token for {Email}", request.Email);
+
+                try
+                {
+                    // Send email - EmailService handles URL encoding
+                    await _emailService.SendPasswordResetEmailAsync(user.Email!, token);
+                    _logger.LogInformation("✅ Password reset email sent to {Email}", request.Email);
+                }
+                catch (Exception emailEx)
+                {
+                    // Log error but don't reveal to user (security)
+                    _logger.LogError(emailEx, "Failed to send password reset email to {Email}", request.Email);
+                    // Continue - still return success to user
+                }
+
                 return Ok(new { success = true, message = "If your email is registered, you will receive a password reset link." });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in forgot password for {Email}", request.Email);
-                return StatusCode(500, new { success = false, message = "An error occurred" });
+                _logger.LogError(ex, "Error in forgot-password for {Email}", request.Email);
+                return StatusCode(500, new { success = false, message = "An error occurred while processing your request" });
+            }
+        }
+
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Password reset attempt for: {Email}", request.Email);
+
+                // Validate request
+                if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Token))
+                {
+                    return BadRequest(new { success = false, message = "Invalid reset request" });
+                }
+
+                if (request.NewPassword != request.ConfirmPassword)
+                {
+                    return BadRequest(new { success = false, message = "Passwords do not match" });
+                }
+
+                var user = await _userManager.FindByEmailAsync(request.Email);
+                if (user == null)
+                {
+                    // Security: Return generic error
+                    _logger.LogWarning("Password reset for non-existent user: {Email}", request.Email);
+                    return BadRequest(new { success = false, message = "Invalid reset request" });
+                }
+
+                if (!user.IsActive)
+                {
+                    _logger.LogWarning("Password reset for inactive user: {Email}", request.Email);
+                    return BadRequest(new { success = false, message = "Account is deactivated" });
+                }
+
+                // IMPORTANT: Don't decode the token! ASP.NET Identity handles encoded tokens
+                // The token from the URL is already URL-encoded, and Identity can handle it
+                var result = await _userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+
+                if (result.Succeeded)
+                {
+                    _logger.LogInformation("✅ Password reset successful for {Email}", request.Email);
+
+                    // Update security stamp to invalidate any existing sessions
+                    await _userManager.UpdateSecurityStampAsync(user);
+
+                    // Send confirmation email
+                    try
+                    {
+                        await _emailService.SendEmailAsync(
+                            user.Email!,
+                            "Password Changed Successfully - DriverConnect",
+                            $@"
+                            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                                <h2 style='color: #4F46E5;'>Password Changed Successfully</h2>
+                                <p>Your DriverConnect password has been changed successfully.</p>
+                                <div style='background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 12px; margin: 20px 0;'>
+                                    <p style='margin: 0; color: #0369a1;'>
+                                        <strong>Note:</strong> If you didn't make this change, please contact support immediately.
+                                    </p>
+                                </div>
+                                <p>Best regards,<br/><strong>DriverConnect Team</strong></p>
+                            </div>"
+                        );
+                    }
+                    catch (Exception emailEx)
+                    {
+                        _logger.LogError(emailEx, "Failed to send confirmation email to {Email}", request.Email);
+                        // Don't fail the reset if email fails
+                    }
+
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Password has been reset successfully. You can now login with your new password."
+                    });
+                }
+
+                // Handle errors
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Password reset failed for {Email}: {Errors}", request.Email, errors);
+
+                // User-friendly error messages
+                if (result.Errors.Any(e => e.Code.Contains("InvalidToken")))
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "The reset link is invalid or has expired. Please request a new password reset."
+                    });
+                }
+
+                // Check for password validation errors
+                var passwordErrors = result.Errors
+                    .Where(e => e.Code.Contains("Password"))
+                    .Select(e => e.Description);
+
+                if (passwordErrors.Any())
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = string.Join(" ", passwordErrors)
+                    });
+                }
+
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Failed to reset password. Please try again or request a new reset link."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during password reset for {Email}", request.Email);
+                return StatusCode(500, new { success = false, message = "An error occurred while resetting your password" });
             }
         }
     }
