@@ -69,18 +69,27 @@ namespace DriverConnectApp.API.Services
                 _logger = logger;
                 _configuration = configuration;
                 _httpContextAccessor = httpContextAccessor;
-                _httpClient.Timeout = TimeSpan.FromSeconds(60);
+                
+            }
+
+            private HttpClient CreateMediaHttpClient()
+            {
+                var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(60);
+                return client;
             }
 
             public async Task<string?> UploadMediaToWhatsAppAsync(
-               byte[] fileBytes,
-               string fileName,
-               string mimeType,
-               string phoneNumberId,
-               string accessToken)
+       byte[] fileBytes,
+       string fileName,
+       string mimeType,
+       string phoneNumberId,
+       string accessToken)
             {
                 try
                 {
+                    // ✅ FIX: Use a separate HttpClient for media operations
+                    using var mediaHttpClient = CreateMediaHttpClient();
                     var uploadUrl = $"https://graph.facebook.com/v19.0/{phoneNumberId}/media";
 
                     using var form = new MultipartFormDataContent();
@@ -91,10 +100,10 @@ namespace DriverConnectApp.API.Services
                     form.Add(new StringContent(mimeType), "type");
                     form.Add(new StringContent("media"), "messaging_product");
 
-                    _httpClient.DefaultRequestHeaders.Authorization =
+                    mediaHttpClient.DefaultRequestHeaders.Authorization =
                         new AuthenticationHeaderValue("Bearer", accessToken);
 
-                    var response = await _httpClient.PostAsync(uploadUrl, form);
+                    var response = await mediaHttpClient.PostAsync(uploadUrl, form);
                     var responseContent = await response.Content.ReadAsStringAsync();
 
                     if (response.IsSuccessStatusCode)
@@ -119,12 +128,15 @@ namespace DriverConnectApp.API.Services
             }
 
             public async Task<(byte[]? FileBytes, string? MimeType, string? FileName)> DownloadWhatsAppMediaAsync(
-    string mediaId,
-    string accessToken,
-    string? originalFileName = null)
+        string mediaId,
+        string accessToken,
+        string? originalFileName = null)
             {
                 try
                 {
+                    // ✅ FIX: Use a separate HttpClient for media operations
+                    using var mediaHttpClient = CreateMediaHttpClient();
+
                     // Step 1: Get media URL from WhatsApp
                     var mediaUrl = $"https://graph.facebook.com/v19.0/{mediaId}";
 
@@ -132,7 +144,7 @@ namespace DriverConnectApp.API.Services
                     using var request = new HttpRequestMessage(HttpMethod.Get, mediaUrl);
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                    var response = await _httpClient.SendAsync(request);
+                    var response = await mediaHttpClient.SendAsync(request);
                     if (!response.IsSuccessStatusCode)
                     {
                         _logger.LogError("Failed to get media URL for {MediaId}: {StatusCode}",
@@ -160,7 +172,7 @@ namespace DriverConnectApp.API.Services
                     using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
                     downloadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                    var mediaResponse = await _httpClient.SendAsync(downloadRequest);
+                    var mediaResponse = await mediaHttpClient.SendAsync(downloadRequest);
                     if (!mediaResponse.IsSuccessStatusCode)
                     {
                         _logger.LogError("Failed to download media from {DownloadUrl}", downloadUrl);
@@ -197,14 +209,25 @@ namespace DriverConnectApp.API.Services
                 };
             }
 
+            private HttpClient CreateMediaHttpClientWithTimeout()
+            {
+                var handler = new HttpClientHandler();
+                var client = new HttpClient(handler);
+                client.Timeout = TimeSpan.FromSeconds(60);
+                return client;
+            }
+
             public async Task<(string? LocalPath, string? FileName, long? FileSize)> DownloadAndStoreMediaAsync(
-                string mediaId,
-                string accessToken,
-                string mediaType)
+        string mediaId,
+        string accessToken,
+        string mediaType)
             {
                 try
                 {
                     _logger.LogInformation("Downloading media {MediaId} of type {MediaType}", mediaId, mediaType);
+
+                    // ✅ FIX: Use a separate HttpClient for media operations
+                    using var mediaHttpClient = CreateMediaHttpClient();
 
                     // Step 1: Get media URL from WhatsApp
                     var mediaUrl = $"https://graph.facebook.com/v19.0/{mediaId}";
@@ -212,7 +235,7 @@ namespace DriverConnectApp.API.Services
                     using var request = new HttpRequestMessage(HttpMethod.Get, mediaUrl);
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                    var response = await _httpClient.SendAsync(request);
+                    var response = await mediaHttpClient.SendAsync(request);
                     if (!response.IsSuccessStatusCode)
                     {
                         _logger.LogError("Failed to get media URL: {StatusCode}", response.StatusCode);
@@ -239,7 +262,7 @@ namespace DriverConnectApp.API.Services
                     using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
                     downloadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                    var downloadResponse = await _httpClient.SendAsync(downloadRequest);
+                    var downloadResponse = await mediaHttpClient.SendAsync(downloadRequest);
                     if (!downloadResponse.IsSuccessStatusCode)
                     {
                         _logger.LogError("Failed to download media: {StatusCode}", downloadResponse.StatusCode);
@@ -1170,7 +1193,10 @@ namespace DriverConnectApp.API.Services
 
                 var json = JsonSerializer.Serialize(requestBody);
 
-                // ✅ FIXED: Use HttpRequestMessage instead of shared headers
+                // ✅ FIXED: Use a separate HttpClient for sending text messages
+                using var sendClient = new HttpClient();
+                sendClient.Timeout = TimeSpan.FromSeconds(30);
+
                 using var request = new HttpRequestMessage(HttpMethod.Post, url)
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -1178,7 +1204,7 @@ namespace DriverConnectApp.API.Services
                 request.Headers.Authorization =
                     new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await sendClient.SendAsync(request);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 _logger.LogInformation("📥 WhatsApp Response: Status={StatusCode}, Body={Response}",
@@ -1201,13 +1227,13 @@ namespace DriverConnectApp.API.Services
         }
 
         public async Task<(bool Success, string? ErrorMessage, string? MediaUrl)> SendMediaMessageAsync(
-            string to,
-            byte[] fileBytes,
-            string fileName,
-            string mimeType,
-            MessageType mediaType,
-            int teamId,
-            string? caption = null)
+    string to,
+    byte[] fileBytes,
+    string fileName,
+    string mimeType,
+    MessageType mediaType,
+    int teamId,
+    string? caption = null)
         {
             try
             {
@@ -1216,9 +1242,9 @@ namespace DriverConnectApp.API.Services
                     return (false, "Team not found or inactive", null);
 
                 ValidateMediaSize(mediaType, fileBytes.Length);
+
                 // ✅ WhatsApp size limits
                 var fileSizeMB = fileBytes.Length / (1024.0 * 1024.0);
-
 
                 switch (mediaType)
                 {
@@ -1238,6 +1264,7 @@ namespace DriverConnectApp.API.Services
                     fileBytes, fileName, mimeType,
                     team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
                     team.WhatsAppAccessToken ?? throw new InvalidOperationException("WhatsAppAccessToken is null"));
+
                 if (string.IsNullOrEmpty(mediaId))
                     return (false, "Failed to upload media to WhatsApp", null);
 
@@ -1275,11 +1302,16 @@ namespace DriverConnectApp.API.Services
                 }
 
                 var json = JsonSerializer.Serialize(requestBody);
+
+                // ✅ FIX: Use a separate HttpClient for sending the media message
+                using var mediaHttpClient = new HttpClient();
+                mediaHttpClient.Timeout = TimeSpan.FromSeconds(30);
+
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                _httpClient.DefaultRequestHeaders.Authorization =
+                mediaHttpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
-                var response = await _httpClient.PostAsync(url, content);
+                var response = await mediaHttpClient.PostAsync(url, content);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -1303,7 +1335,6 @@ namespace DriverConnectApp.API.Services
                 // Handle size limit errors
                 return (false, ex.Message, null);
             }
-
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending WhatsApp media message");
@@ -1322,8 +1353,11 @@ namespace DriverConnectApp.API.Services
                     return false;
                 }
 
-                // Download file from URL
-                var response = await _httpClient.GetAsync(mediaUrl);
+                // ✅ FIX: Download file from URL using a separate HttpClient
+                using var downloadClient = new HttpClient();
+                downloadClient.Timeout = TimeSpan.FromSeconds(30);
+
+                var response = await downloadClient.GetAsync(mediaUrl);
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogError("Failed to download media from {MediaUrl}", mediaUrl);
@@ -1379,8 +1413,11 @@ namespace DriverConnectApp.API.Services
                 }
                 else if (!string.IsNullOrEmpty(mediaUrl) && messageType != MessageType.Text)
                 {
-                    // ✅ FIX: Renamed variable to avoid conflict
-                    var downloadResponse = await _httpClient.GetAsync(mediaUrl); // ❌ WAS: response
+                    // ✅ FIX: Use a separate HttpClient for downloading
+                    using var downloadClient = new HttpClient();
+                    downloadClient.Timeout = TimeSpan.FromSeconds(30);
+
+                    var downloadResponse = await downloadClient.GetAsync(mediaUrl);
                     if (!downloadResponse.IsSuccessStatusCode)
                     {
                         _logger.LogError("Failed to download media from {MediaUrl}", mediaUrl);
@@ -1397,6 +1434,7 @@ namespace DriverConnectApp.API.Services
                         fileBytes, fileName, mimeType,
                         team.WhatsAppPhoneNumberId ?? throw new InvalidOperationException("WhatsAppPhoneNumberId is null"),
                         team.WhatsAppAccessToken ?? throw new InvalidOperationException("WhatsAppAccessToken is null"));
+
                     if (string.IsNullOrEmpty(mediaId))
                     {
                         _logger.LogError("Failed to upload media to WhatsApp for group message");
@@ -1446,10 +1484,13 @@ namespace DriverConnectApp.API.Services
                 var json = JsonSerializer.Serialize(requestBody);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                // ✅ FIX: Use a separate HttpClient for sending group messages
+                using var sendClient = new HttpClient();
+                sendClient.Timeout = TimeSpan.FromSeconds(30);
+                sendClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
-                var response = await _httpClient.PostAsync(url, content); // ✅ This is fine now
+                var response = await sendClient.PostAsync(url, content);
 
                 if (response.IsSuccessStatusCode)
                 {
