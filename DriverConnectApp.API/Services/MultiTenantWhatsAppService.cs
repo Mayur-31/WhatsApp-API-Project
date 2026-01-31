@@ -359,7 +359,7 @@ namespace DriverConnectApp.API.Services
 
             _logger.LogInformation(
                 "📤 Processing message for team {TeamId}: Type={MessageType}, Content={Content}",
-                teamId, request.MessageType, request.Content?.Substring(0, Math.Min(50, request.Content.Length)));
+                teamId, request.MessageType, request.Content?.Substring(0, Math.Min(50, request.Content?.Length ?? 0)));
 
             // ✅ Get team
             var team = await GetTeamById(teamId);
@@ -396,12 +396,116 @@ namespace DriverConnectApp.API.Services
                 }
                 else
                 {
-                    // ✅ REGULAR TEXT MESSAGES: Send via WhatsApp API
-                    whatsAppMessageId = await SendWhatsAppTextMessageAndGetIdAsync(
-                        phoneNumber,
-                        request.Content ?? string.Empty,
-                        teamId);
+                    // ✅ CRITICAL FIX: Determine message type and route to correct sending method
+                    if (!Enum.TryParse<MessageType>(request.MessageType, out var messageType))
+                    {
+                        messageType = MessageType.Text;
+                    }
+
+                    _logger.LogInformation("📤 Message routing: Type={MessageType}, HasMediaUrl={HasMediaUrl}, HasLocation={HasLocation}",
+                        messageType, !string.IsNullOrEmpty(request.MediaUrl), !string.IsNullOrEmpty(request.Location));
+
+                    // ✅ Route 1: TEXT MESSAGE (no media, no location)
+                    if (messageType == MessageType.Text && string.IsNullOrEmpty(request.MediaUrl))
+                    {
+                        _logger.LogInformation("📝 Sending TEXT message to {Phone}", phoneNumber);
+                        whatsAppMessageId = await SendWhatsAppTextMessageAndGetIdAsync(
+                            phoneNumber,
+                            request.Content ?? string.Empty,
+                            teamId);
+
+                        if (string.IsNullOrEmpty(whatsAppMessageId))
+                        {
+                            _logger.LogError("❌ Failed to send text message");
+                            throw new InvalidOperationException("Failed to send text message to WhatsApp");
+                        }
+                        _logger.LogInformation("✅ Text message sent successfully");
+                    }
+                    // ✅ Route 2: MEDIA MESSAGE (image/video/audio/document)
+                    else if (!string.IsNullOrEmpty(request.MediaUrl) &&
+                             (messageType == MessageType.Image || messageType == MessageType.Video ||
+                              messageType == MessageType.Audio || messageType == MessageType.Document))
+                    {
+                        _logger.LogInformation("🎯 Sending {MediaType} to {Phone} from URL: {MediaUrl}",
+                            messageType, phoneNumber, request.MediaUrl);
+
+                        bool success = await SendMediaFromUrlAsync(
+                            phoneNumber,
+                            request.MediaUrl,
+                            messageType,
+                            teamId,
+                            request.Content ?? $"Sent a {messageType.ToString().ToLower()}");
+
+                        if (success)
+                        {
+                            whatsAppMessageId = $"media_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
+                            _logger.LogInformation("✅ {MediaType} sent successfully to {Phone}", messageType, phoneNumber);
+                        }
+                        else
+                        {
+                            _logger.LogError("❌ Failed to send {MediaType} to {Phone}", messageType, phoneNumber);
+                            throw new InvalidOperationException($"Failed to send {messageType} media to WhatsApp");
+                        }
+                    }
+                    // ✅ Route 3: LOCATION MESSAGE
+                    else if (messageType == MessageType.Location && !string.IsNullOrEmpty(request.Location))
+                    {
+                        _logger.LogInformation("📍 Sending location to {Phone}: {Location}", phoneNumber, request.Location);
+
+                        var locationParts = request.Location.Split(',');
+                        if (locationParts.Length == 2 &&
+                            decimal.TryParse(locationParts[0].Trim(), out var latitude) &&
+                            decimal.TryParse(locationParts[1].Trim(), out var longitude))
+                        {
+                            bool success = await SendLocationMessageAsync(
+                                phoneNumber,
+                                latitude,
+                                longitude,
+                                teamId,
+                                request.Content ?? "Location shared");
+
+                            if (success)
+                            {
+                                whatsAppMessageId = $"location_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}";
+                                _logger.LogInformation("✅ Location sent successfully to {Phone}", phoneNumber);
+                            }
+                            else
+                            {
+                                _logger.LogError("❌ Failed to send location to {Phone}", phoneNumber);
+                                throw new InvalidOperationException("Failed to send location to WhatsApp");
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogError("❌ Invalid location format: {Location}. Expected: 'latitude,longitude'", request.Location);
+                            throw new InvalidOperationException("Invalid location format. Expected: 'latitude,longitude'");
+                        }
+                    }
+                    // ✅ Route 4: FALLBACK (unexpected combination)
+                    else
+                    {
+                        _logger.LogWarning("⚠️ Unexpected message configuration - MessageType={MessageType}, HasMedia={HasMedia}, HasLocation={HasLocation}",
+                            request.MessageType, !string.IsNullOrEmpty(request.MediaUrl), !string.IsNullOrEmpty(request.Location));
+
+                        // Send as text as fallback
+                        whatsAppMessageId = await SendWhatsAppTextMessageAndGetIdAsync(
+                            phoneNumber,
+                            request.Content ?? "Message",
+                            teamId);
+
+                        if (string.IsNullOrEmpty(whatsAppMessageId))
+                        {
+                            throw new InvalidOperationException("Failed to send message to WhatsApp");
+                        }
+                    }
                 }
+            }
+            else
+            {
+                // Test mode
+                whatsAppMessageId = $"test_{DateTime.UtcNow.Ticks}";
+                _logger.LogInformation("🧪 TEST MODE: Would send {MessageType} to {Phone}",
+                    request.MessageType, phoneNumber);
             }
 
             return new
@@ -410,7 +514,8 @@ namespace DriverConnectApp.API.Services
                 WhatsAppMessageId = whatsAppMessageId,
                 PhoneNumber = phoneNumber,
                 Success = true,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                MessageType = request.MessageType
             };
         }
 
@@ -1481,64 +1586,61 @@ namespace DriverConnectApp.API.Services
 
         public async Task<bool> SendLocationMessageAsync(string to, decimal latitude, decimal longitude, int teamId, string? name = null, string? address = null)
         {
-            var team = await GetTeamById(teamId);
-            if (team == null || !team.IsActive)
-            {
-                _logger.LogError("Team {TeamId} not found or inactive", teamId);
-                return false;
-            }
-
-            var testMode = _configuration.GetValue<bool>("WhatsApp:TestMode", false);
-            if (testMode)
-            {
-                _logger.LogInformation("🧪 TEST MODE: Location message would be sent to {To} for team {TeamName}",
-                    to, team.Name);
-                return true;
-            }
-
             try
             {
-                var payload = new
+                var team = await GetTeamById(teamId);
+                if (team == null || !team.IsActive)
+                {
+                    _logger.LogError("Team {TeamId} not found or inactive", teamId);
+                    return false;
+                }
+
+                var formattedPhone = PhoneNumberUtil.FormatForWhatsAppApi(to, team.CountryCode ?? "91");
+                _logger.LogInformation("📍 Sending location to {Phone}: Lat={Latitude}, Lon={Longitude}",
+                    formattedPhone, latitude, longitude);
+
+                var url = $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/messages";
+
+                var requestBody = new
                 {
                     messaging_product = "whatsapp",
                     recipient_type = "individual",
-                    to = to,
+                    to = formattedPhone,
                     type = "location",
                     location = new
                     {
-                        latitude = latitude.ToString(),
-                        longitude = longitude.ToString(),
-                        name = name,
-                        address = address
+                        latitude = latitude.ToString("F6"),
+                        longitude = longitude.ToString("F6"),
+                        name = name ?? "Location",
+                        address = address ?? name ?? "Shared Location"  // ✅ NOW USES address PARAMETER
                     }
                 };
 
-                var url = $"https://graph.facebook.com/v{team.ApiVersion}/{team.WhatsAppPhoneNumberId}/messages";
-                var formattedPhoneNumber = new string(to.Where(char.IsDigit).ToArray());
-
-                var json = JsonSerializer.Serialize(payload);
+                var json = JsonSerializer.Serialize(requestBody);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
 
-                var response = await _httpClient.PostAsync(url, content);
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", team.WhatsAppAccessToken);
+                httpRequest.Content = content;
+
+                var response = await _httpClient.SendAsync(httpRequest);
+                var responseContent = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("✅ Location message sent successfully to {To} for team {TeamName}", to, team.Name);
+                    _logger.LogInformation("✅ Location sent to {Phone}", formattedPhone);
                     return true;
                 }
                 else
                 {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("❌ Failed to send location message to {To} for team {TeamName}. Status: {StatusCode}, Error: {Error}",
-                        to, team.Name, response.StatusCode, errorContent);
+                    _logger.LogError("❌ Failed to send location to {Phone}: {StatusCode} - {Response}",
+                        formattedPhone, response.StatusCode, responseContent);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error sending location message to {To} for team {TeamId}", to, teamId);
+                _logger.LogError(ex, "❌ Error sending location message to {To}", to);
                 return false;
             }
         }

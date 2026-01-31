@@ -387,7 +387,7 @@ namespace DriverConnectApp.API.Controllers
                 {
                     Content = messageContent,
                     MessageType = messageTypeEnum.ToString(),
-                    MediaUrl = request.MediaUrl,
+                    MediaUrl = mediaUrl,
                     FileName = request.FileName,
                     FileSize = request.FileSize,
                     MimeType = request.MimeType,
