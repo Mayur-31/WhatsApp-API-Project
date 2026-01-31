@@ -50,7 +50,7 @@ env:
 
     - SMTP_USERNAME
     
-    - SMTP_FROM
+    - SmtpSettings__From
 
 
 volumes:
