@@ -593,6 +593,177 @@ namespace DriverConnectApp.API.Controllers
             }
         }
 
+        [HttpGet("{id}/latest")]
+        public async Task<ActionResult<object>> GetLatestMessageInfo(int id)
+        {
+            try
+            {
+                _logger.LogInformation("🔍 GetLatestMessageInfo called for conversation {Id}", id);
+
+                if (!await HasAccessToConversation(id))
+                {
+                    return Forbid("You do not have access to this conversation.");
+                }
+
+                var conversation = await _context.Conversations
+                    .Where(c => c.Id == id && c.IsActive)
+                    .FirstOrDefaultAsync();
+
+                if (conversation == null)
+                {
+                    return NotFound(new { message = "Conversation not found" });
+                }
+
+                var latestMessage = await _context.Messages
+                    .Where(m => m.ConversationId == id && !m.IsDeleted)
+                    .OrderByDescending(m => m.SentAt)
+                    .Select(m => new { m.SentAt, m.Id })
+                    .FirstOrDefaultAsync();
+
+                var latestTimestamp = latestMessage != null ? latestMessage.SentAt.ToString("o") : (conversation.LastMessageAt?.ToString("o") ?? null);
+                var messageCount = await _context.Messages.CountAsync(m => m.ConversationId == id && !m.IsDeleted);
+
+                return Ok(new
+                {
+                    latestMessageTimestamp = latestTimestamp,
+                    lastMessageId = latestMessage?.Id ?? 0,
+                    messageCount = messageCount,
+                    hasNewMessages = latestMessage != null,
+                    conversationId = id
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in GetLatestMessageInfo for conversation {Id}", id);
+                return StatusCode(500, new { message = "An error occurred while checking for new messages" });
+            }
+        }
+
+        [HttpGet("{id}/messages/since/{lastMessageId}")]
+        public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessagesSince(int id, int lastMessageId)
+        {
+            try
+            {
+                _logger.LogInformation("📥 GetMessagesSince called for conversation {ConversationId}, lastMessageId: {LastMessageId}",
+                    id, lastMessageId);
+
+                if (!await HasAccessToConversation(id))
+                {
+                    return Forbid("You do not have access to this conversation.");
+                }
+
+                var lastMessage = await _context.Messages
+                    .Where(m => m.Id == lastMessageId)
+                    .Select(m => m.SentAt)
+                    .FirstOrDefaultAsync();
+
+                DateTime cutoffTime;
+                if (lastMessage != default(DateTime))
+                {
+                    cutoffTime = lastMessage;
+                }
+                else
+                {
+                    cutoffTime = DateTime.UtcNow.AddHours(-1);
+                    _logger.LogWarning("⚠️ Last message {LastMessageId} not found, using 1-hour cutoff", lastMessageId);
+                }
+
+                var newMessages = await _context.Messages
+                    .Where(m => m.ConversationId == id &&
+                               !m.IsDeleted &&
+                               m.SentAt > cutoffTime &&
+                               m.Id > lastMessageId)
+                    .OrderBy(m => m.SentAt)
+                    .Select(m => new MessageDto
+                    {
+                        Id = m.Id,
+                        ConversationId = m.ConversationId,
+                        Content = m.Content ?? string.Empty,
+                        MessageType = m.MessageType.ToString(),
+                        IsFromDriver = m.IsFromDriver,
+                        // FIXED: Remove .ToString("o") - assign DateTime directly
+                        SentAt = m.SentAt,
+                        // FIXED: Convert enum to string and handle null
+                        Status = m.Status.ToString(),
+                        WhatsAppMessageId = m.WhatsAppMessageId,
+                        MediaUrl = m.MediaUrl,
+                        FileName = m.FileName,
+                        FileSize = m.FileSize,
+                        MimeType = m.MimeType,
+                        Location = m.Location,
+                        ContactName = m.ContactName,
+                        ContactPhone = m.ContactPhone,
+                        IsGroupMessage = m.IsGroupMessage,
+                        SenderPhoneNumber = m.SenderPhoneNumber,
+                        SenderName = m.SenderName,
+                        Context = m.Context,
+                        ReplyToMessageId = m.ReplyToMessageId,
+                        ReplyToMessageContent = m.ReplyToMessageContent,
+                        ReplyToSenderName = m.ReplyToSenderName
+                    })
+                    .ToListAsync();
+
+                _logger.LogInformation("✅ Returning {Count} new messages for conversation {ConversationId}",
+                    newMessages.Count, id);
+
+                return Ok(newMessages);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in GetMessagesSince for conversation {ConversationId}", id);
+                return StatusCode(500, new { message = "An error occurred while fetching new messages" });
+            }
+        }
+
+        [HttpGet("{id}/summary")]
+        public async Task<ActionResult<object>> GetConversationSummary(int id)
+        {
+            try
+            {
+                _logger.LogInformation("📋 GetConversationSummary called for conversation {Id}", id);
+
+                if (!await HasAccessToConversation(id))
+                {
+                    return Forbid("You do not have access to this conversation.");
+                }
+
+                var conversation = await _context.Conversations
+                    .Where(c => c.Id == id && c.IsActive)
+                    .Select(c => new
+                    {
+                        Id = c.Id,
+                        LastMessageAt = c.LastMessageAt,
+                        LastMessagePreview = _context.Messages
+                            .Where(m => m.ConversationId == c.Id && !m.IsDeleted)
+                            .OrderByDescending(m => m.SentAt)
+                            .Select(m => m.Content ?? "No content")
+                            .FirstOrDefault() ?? "No messages",
+                        MessageCount = _context.Messages.Count(m => m.ConversationId == c.Id && !m.IsDeleted),
+                        IsAnswered = c.IsAnswered,
+                        // FIXED: Compare to enum value MessageStatus.Read instead of string "Read"
+                        UnreadCount = _context.Messages.Count(m =>
+                            m.ConversationId == c.Id &&
+                            !m.IsDeleted &&
+                            m.IsFromDriver &&
+                            m.Status != MessageStatus.Read)
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (conversation == null)
+                {
+                    return NotFound(new { message = "Conversation not found" });
+                }
+
+                return Ok(conversation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in GetConversationSummary for conversation {Id}", id);
+                return StatusCode(500, new { message = "An error occurred while fetching conversation summary" });
+            }
+        }
+
+
         [HttpGet("{id}")]
         public async Task<ActionResult<ConversationDetailDto>> GetConversation(int id)
         {
