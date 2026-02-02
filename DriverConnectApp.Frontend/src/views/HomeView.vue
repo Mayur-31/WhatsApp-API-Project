@@ -2265,9 +2265,6 @@ const sendMessage = async () => {
   if ((! newMessage.value. trim() && !uploadedFile.value) || !selectedConversation.value || sending.value) {
     return;
   }
-  
-
-  pausePolling();
 
   // ✅ CRITICAL FIX: Check 24-hour window BEFORE sending non-template messages
   if (! selectedConversation.value. IsGroupConversation && !selectedConversation.value.canSendNonTemplateMessages) {
@@ -2277,103 +2274,109 @@ const sendMessage = async () => {
   }
 
   sending.value = true;
-  try {
-    // ✅ NEW: Build reply context
-    let replyToMessageId: number | null = null;
-    let replyToMessageContent: string | null = null;
-    let replyToSenderName: string | null = null;
+  const messageText = newMessage.value;
+  newMessage.value = '';
 
-    if (replyingToMessage.value) {
-      replyToMessageId = replyingToMessage.value.Id;
-      replyToMessageContent = replyingToMessage.value.Content?.substring(0, 100);
-      replyToSenderName = replyingToMessage.value.IsFromDriver 
-        ? 'Driver' 
-        : 'You';
+  try {
+    // Determine team ID - CRITICAL FIX
+    let teamId: number;
+    
+    if (isAdmin.value && selectedTeamId.value > 0) {
+      // Admin with specific team selected
+      teamId = selectedTeamId.value;
+    } else if (isAdmin.value && selectedTeamId.value === 0 && selectedConversation.value.TeamId) {
+      // Admin with "All Teams" but specific conversation has team
+      teamId = selectedConversation.value.TeamId;
+    } else {
+      // Non-admin or fallback: use user's team
+      teamId = currentUserTeamId.value;
     }
 
-    // ✅ NEW: Create optimistic message FIRST
-    const optimisticMessage: MessageDto = {
-      Id: Date.now(), // Temporary ID
-      ConversationId: selectedConversation.value!.Id,
-      Content: messageText.value.trim(),
-      MessageType: 'Text',
+    if (!teamId) {
+      alert('No team context available for sending message');
+      sending.value = false;
+      newMessage.value = messageText;
+      return;
+    }
+
+    console.log(`Sending message for team: ${teamId}`);
+
+    let payload: MessageRequest = {
+      Content: messageText,
       IsFromDriver: false,
-      SentAt: new Date().toISOString(),
-      Status: 'Sending',
-      WhatsAppMessageId: `temp_${Date.now()}`,
-      MediaUrl: null,
-      FileName: null,
-      FileSize: null,
-      MimeType: null,
-      Location: null,
-      ContactName: null,
-      ContactPhone: null,
-      IsGroupMessage: selectedConversation.value!.IsGroupConversation,
-      SenderPhoneNumber: null,
-      SenderName: null,
-      Context: null,
-      ReplyToMessageId: replyToMessageId,
-      ReplyToMessageContent: replyToMessageContent,
-      ReplyToSenderName: replyToSenderName,
-      Reactions: [],
-      IsStarred: false,
-      IsPinned: false,
-      IsDeleted: false
+      ConversationId: selectedConversation.value.Id,
+      WhatsAppMessageId: `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      MessageType: 'Text',
+      TeamId: teamId,
+      IsTemplateMessage: false
     };
 
-    // ✅ NEW: Add to messages array immediately (optimistic UI)
-    messages.value.push(optimisticMessage);
+    if (selectedConversation.value.IsGroupConversation) {
+      payload.IsGroupMessage = true;
+      payload.GroupId = selectedConversation.value.WhatsAppGroupId;
+    } else {
+      payload.DriverId = selectedConversation.value.DriverId;
+    }
+
+    // Include reply context
+    if (replyingToMessage.value) {
+      payload.ReplyToMessageId = replyingToMessage.value.Id;
+      payload.ReplyToMessageContent = getEnhancedReplyPreview(replyingToMessage.value);
+      payload.ReplyToSenderName = getEnhancedReplySenderName(replyingToMessage.value);
+    }
+
+    if (uploadedFile.value) {
+      const fileData = await uploadFile(uploadedFile.value);
+      
+      payload = {
+        ...payload,
+        MessageType: fileData.MessageType,
+        MediaUrl: fileData.MediaUrl,
+        FileName: fileData.FileName,
+        FileSize: fileData.FileSize,
+        MimeType: fileData.MimeType,
+        Content: messageText || `Sent a ${fileData.MessageType.toLowerCase()}`
+      };
+    }
+
+    const response = await api.post('/messages', payload);
+    
+    const sentMessage = response.data;
+    messages.value.push(sentMessage);
+
+    // ✅ Refresh window status after sending
+    await startWindowStatusPolling();
+    
+    cancelReply();
+    
     await scrollToBottom();
 
-    // ✅ NEW: Clear input immediately for better UX
-    const messageContent = messageText.value.trim();
-    messageText.value = '';
-    const wasReplyingTo = replyingToMessage.value;
-    replyingToMessage.value = null;
-
-    // ✅ CHANGED: Send to backend and handle response
-    try {
-      const payload = {
-        PhoneNumber: selectedConversation.value!.DriverPhone,
-        Message: messageContent,
-        ConversationId: selectedConversation.value!.Id,
-        IsGroupMessage: selectedConversation.value!.IsGroupConversation,
-        GroupId: selectedConversation.value!.GroupId,
-        ReplyToMessageId: replyToMessageId
-      };
-
-      const response = await api.post('/messages/send', payload);
-      
-      // ✅ NEW: Update optimistic message with real data
-      const sentMessage = response.data;
-      const msgIndex = messages.value.findIndex(m => m.Id === optimisticMessage.Id);
-      if (msgIndex !== -1) {
-        messages.value[msgIndex] = {
-          ...sentMessage,
-          Status: 'Sent'
-        };
+    if (!selectedConversation.value.IsAnswered) {
+      try {
+        await api.put(`/conversations/${selectedConversation.value.Id}/mark-answered`);
+        selectedConversation.value.IsAnswered = true;
+    
+        await loadConversations();
+        await loadUnansweredCount();
+      } catch (statusError) {
+        console.warn('Failed to update conversation status:', statusError);
       }
-      
-      // ✅ NEW: Update last message timestamp
-      lastMessageTimestamp = sentMessage.SentAt;
-      
-      // ✅ NEW: Lightweight update to conversation list
-      await updateConversationListItem(selectedConversation.value!.Id);
-      
-    } catch (error: any) {
-      // ✅ NEW: Remove optimistic message on error
-      const msgIndex = messages.value.findIndex(m => m.Id === optimisticMessage.Id);
-      if (msgIndex !== -1) {
-        messages.value.splice(msgIndex, 1);
-      }
-      
-      // ✅ NEW: Restore the message text so user can try again
-      messageText.value = messageContent;
-      replyingToMessage.value = wasReplyingTo;
-      
+    }
+
+    uploadedFile.value = null;
+    showMediaOptions.value = false;
+    showFileInfo.value = false;
+
+  } catch (error:  any) {
+    // ✅ ENHANCED: Handle template-required error
+    if (error.response?. data?.code === 'TEMPLATE_REQUIRED' || 
+        error.response?.data?. message?. includes('TEMPLATE_REQUIRED')) {
+      alert('❌ Cannot send regular messages outside 24-hour window.\n\nPlease use a template message instead.');
+      openTemplateDialog();
+    } else {
       alert(`Failed to send message: ${error.response?.data?.message || error.message}`);
     }
-    
+    newMessage.value = messageText;
   } finally {
     sending.value = false;
   }
@@ -2381,169 +2384,46 @@ const sendMessage = async () => {
 
 
 let pollingInterval: number | null = null;
-let lastMessageTimestamp: string | null = null;
-let lastConversationUpdate: string | null = null;
-let isPollingPaused = ref(false);
-let missedUpdatesCount = ref(0);
 
-// Smart polling - only fetch when there might be new data
-function startSmartPolling() {
+// Start polling for updates
+function startPolling() {
   if (pollingInterval) {
     clearInterval(pollingInterval);
   }
 
-  // ✅ CHANGED: Interval increased from 5 seconds to 30 seconds
   pollingInterval = window.setInterval(async () => {
-    // Don't poll if user is actively typing or interacting
-    if (isPollingPaused.value) {
-      console.log('⏸️ Polling paused - user is active');
-      return;
-    }
-
+    // Silently refresh conversations
     try {
-      // Check if there are new messages without full refresh
-      await checkForNewMessages();
-    } catch (error) {
-      console.error('Smart polling error:', error);
-    }
-  }, 30000); // ✅ CHANGED: 30 seconds instead of 5
-
-  console.log('✅ Smart polling started (30s interval)');
-}
-
-// ✅ NEW: Check for new messages without full page refresh
-async function checkForNewMessages() {
-  if (!selectedConversation.value?.Id) {
-    return;
-  }
-
-  try {
-    // Just check the latest message timestamp
-    const response = await api.get(`/conversations/${selectedConversation.value.Id}/latest`);
-    const latestTimestamp = response.data.latestMessageTimestamp;
-    const hasNewMessages = response.data.hasNewMessages;
-
-    if (hasNewMessages && latestTimestamp !== lastMessageTimestamp) {
-      console.log('📨 New messages detected, fetching...');
-      lastMessageTimestamp = latestTimestamp;
+      await loadConversations();
       
-      // Fetch only new messages, not entire conversation
-      await fetchNewMessagesOnly();
-      
-      // Show notification
-      showNewMessageNotification();
-    }
-  } catch (error: any) {
-    // Silently fail for this check
-    if (error.response?.status !== 404) {
-      console.error('Error checking for new messages:', error);
-    }
-  }
-}
-
-// ✅ NEW: Fetch only new messages that arrived after the last known message
-async function fetchNewMessagesOnly() {
-  if (!selectedConversation.value?.Id) return;
-
-  try {
-    const lastMessageId = messages.value.length > 0 
-      ? messages.value[messages.value.length - 1].Id 
-      : 0;
-
-    const response = await api.get(
-      `/conversations/${selectedConversation.value.Id}/messages/since/${lastMessageId}`
-    );
-    
-    const newMessages = response.data;
-    
-    if (newMessages && newMessages.length > 0) {
-      console.log(`📥 Adding ${newMessages.length} new messages`);
-      
-      // Add new messages to existing array
-      newMessages.forEach((msg: MessageDto) => {
-        // Check for duplicates
-        if (!messages.value.find(m => m.Id === msg.Id)) {
-          messages.value.push(msg);
+      // Refresh current conversation messages
+      if (selectedConversation.value?.Id) {
+        const response = await api.get(`/conversations/${selectedConversation.value.Id}`);
+        const newMessages = response.data.Messages || [];
+        
+        // Only update if there are new messages
+        if (newMessages.length > messages.value.length) {
+          messages.value = newMessages;
+          await scrollToBottom();
         }
-      });
-      
-      // Sort messages by timestamp
-      messages.value.sort((a, b) => 
-        new Date(a.SentAt).getTime() - new Date(b.SentAt).getTime()
-      );
-      
-      await scrollToBottom();
-      
-      // Update conversation list (lightweight update)
-      await updateConversationListItem(selectedConversation.value.Id);
+      }
+    } catch (error) {
+      console.error('Polling error:', error);
     }
-  } catch (error: any) {
-    console.error('Error fetching new messages:', error);
-  }
+  }, 5000); // Poll every 5 seconds
 }
 
-// ✅ NEW: Lightweight conversation list update - updates only one item
-async function updateConversationListItem(conversationId: number) {
-  try {
-    const response = await api.get(`/conversations/${conversationId}/summary`);
-    const updatedConv = response.data;
-    
-    // Update only this conversation in the list
-    const index = conversations.value.findIndex(c => c.Id === conversationId);
-    if (index !== -1) {
-      conversations.value[index] = {
-        ...conversations.value[index],
-        LastMessageAt: updatedConv.LastMessageAt,
-        LastMessagePreview: updatedConv.LastMessagePreview,
-        MessageCount: updatedConv.MessageCount
-      };
-      
-      // Re-sort conversations
-      conversations.value.sort((a, b) => {
-        const aTime = new Date(a.LastMessageAt || a.CreatedAt).getTime();
-        const bTime = new Date(b.LastMessageAt || b.CreatedAt).getTime();
-        return bTime - aTime;
-      });
-    }
-  } catch (error) {
-    console.error('Error updating conversation item:', error);
-  }
-}
-
-// ✅ NEW: Show a subtle notification for new messages
-function showNewMessageNotification() {
-  missedUpdatesCount.value++;
-  
-  // You can add a toast notification here
-  console.log('🔔 New message received!');
-  
-  // Optional: Play notification sound
-  // const audio = new Audio('/notification.mp3');
-  // audio.play().catch(e => console.log('Could not play sound:', e));
-}
-
-// ✅ NEW: Pause polling when user is typing or interacting
-function pausePolling() {
-  isPollingPaused.value = true;
-  setTimeout(() => {
-    isPollingPaused.value = false;
-  }, 5000); // Resume after 5 seconds of inactivity
-}
-
-// ✅ CHANGED: Updated stop function
+// Stop polling
 function stopPolling() {
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = null;
-    console.log('⏹️ Polling stopped');
   }
 }
 
-
-
 // UPDATED: selectConversation to include window status check
 const selectConversation = async (conversation: ConversationDto) => {
-  if (!conversation.Id) {
+  if (!conversation. Id) {
     alert('Invalid conversation data');
     return;
   }
@@ -2554,7 +2434,7 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     selectedConversation.value = response.data;
     messages.value = Array.isArray(selectedConversation.value.Messages) 
-      ? selectedConversation.value.Messages 
+      ? selectedConversation. value.Messages 
       : [];
     
     console.log(`Loaded ${messages.value.length} messages for conversation ${conversation.Id}`);
@@ -2576,26 +2456,20 @@ const selectConversation = async (conversation: ConversationDto) => {
     
     // Check 24-hour window status for individual conversations
     if (windowStatusPollInterval.value) {
-      clearInterval(windowStatusPollInterval.value);
+      clearInterval(windowStatusPollInterval);
       windowStatusPollInterval.value = null;
     }
 
     // ✅ Start polling window status for individual conversations
-    if (!selectedConversation.value.IsGroupConversation) {
+    if (! selectedConversation.value.IsGroupConversation) {
       startWindowStatusPolling();
     }
-    
-    // ✅ Set last message timestamp for smart polling
-    lastMessageTimestamp = messages.value.length > 0
-      ? messages.value[messages.value.length - 1].SentAt
-      : null;
     
     await scrollToBottom();
   } catch (error: any) {
     alert(`Failed to load conversation: ${error.response?.data?.message || error.message}`);
     selectedConversation.value = null;
     messages.value = [];
-    lastMessageTimestamp = null;
   } finally {
     messagesLoading.value = false;
   }
@@ -2623,10 +2497,7 @@ onMounted(async () => {
   
   // Then load conversations with team context
   await loadConversations();
-  
-  // ✅ START SMART POLLING (30s interval)
-  startSmartPolling();
-  
+  startPolling();
   await loadUnansweredCount();
   
   if (isAdminOrManager.value) {
@@ -2637,16 +2508,7 @@ onMounted(async () => {
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
   document.addEventListener('click', closeDropdownOnClickOutside);
-  
-  // ✅ PAUSE POLLING WHEN USER IS TYPING
-  const messageInput = document.querySelector('textarea, input[type="text"]');
-  if (messageInput) {
-    messageInput.addEventListener('input', pausePolling);
-    messageInput.addEventListener('focus', pausePolling);
-  }
 });
-
-
 
 // Watch for team changes
 watch(selectedTeamId, async (newTeamId) => {
@@ -2656,19 +2518,10 @@ watch(selectedTeamId, async (newTeamId) => {
 
 onUnmounted(() => {
   stopPolling();
-  
-  // ✅ NEW: Clean up event listeners
-  const messageInput = document.querySelector('textarea, input[type="text"]');
-  if (messageInput) {
-    messageInput.removeEventListener('input', pausePolling);
-    messageInput.removeEventListener('focus', pausePolling);
-  }
-  
   if (windowStatusPollInterval.value) {
-    clearInterval(windowStatusPollInterval);
+    clearInterval(windowStatusPollInterval.value);
+    windowStatusPollInterval.value = null;
   }
-  
-  document.removeEventListener('click', closeMessageMenu);
   document.removeEventListener('click', closeDropdownOnClickOutside);
 });
 
