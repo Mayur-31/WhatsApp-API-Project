@@ -101,10 +101,10 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 h-full bg-white border-t border-gray-200">
+      <div class="flex flex-1 h-[calc(100vh-180px)] bg-white border-t border-gray-200">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="bg-white border-r border-gray-200 flex flex-col h-full overflow-hidden">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -250,7 +250,7 @@
 
         
         <!-- Chat Area -->
-        <div class="flex flex-col h-full">
+        <div class="flex-1 flex flex-col bg-white min-h-0 h-full">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -456,7 +456,7 @@
 
             <!-- Messages Area -->
             <div 
-              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative"
+              class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative"
               ref="chatContainer"
               @scroll="handleScroll"
             >
@@ -4191,7 +4191,7 @@ const scrollToRepliedMessage = async (messageId: number) => {
 .flex-1.min-h-0.overflow-y-auto {
   min-height: 0 !important;
   flex: 1 1 0% !important;
-  height: 0; /* Critical for flexbox scrolling */
+ 
 }
 
 /* Ensure parent has fixed height */
