@@ -454,7 +454,11 @@
             </div>
 
             <!-- Messages Area -->
-            <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50" ref="chatContainer">
+            <div 
+              class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50 custom-scrollbar relative" 
+              ref="chatContainer"
+              @scroll="handleScroll"
+            >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -784,6 +788,26 @@
                   </div>
                 </div>
               </div>
+              <button
+                v-show="showScrollToBottomButton"
+                @click="scrollToBottom()"
+                class="absolute bottom-6 right-6 z-20 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-100 transition-all border border-gray-200"
+                title="Scroll to latest message"
+              >
+                <svg
+                  class="w-5 h-5 text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                  />
+                </svg>
+              </button>
             </div>
 
             <!-- ENHANCED: Clickable Reply Context Bar -->
@@ -1909,6 +1933,10 @@ const selectedConversation = ref<ConversationDetailDto | null>(null);
 const messages = ref<MessageDto[]>([]);
 const newMessage = ref('');
 const chatContainer = ref<HTMLElement | null>(null);
+
+const showScrollToBottomButton = ref(false);
+const isAutoScrolling = ref(false);
+
 const showUnansweredOnly = ref(false);
 const showGroupsOnly = ref(false);
 const unansweredCount = ref(0);
@@ -2349,7 +2377,7 @@ const sendMessage = async () => {
     
     cancelReply();
     
-    await scrollToBottom();
+    await scrollToBottom(false);
 
     if (!selectedConversation.value.IsAnswered) {
       try {
@@ -2465,7 +2493,7 @@ const selectConversation = async (conversation: ConversationDto) => {
       startWindowStatusPolling();
     }
     
-    await scrollToBottom();
+    await scrollToBottom(false);
   } catch (error: any) {
     alert(`Failed to load conversation: ${error.response?.data?.message || error.message}`);
     selectedConversation.value = null;
@@ -2532,6 +2560,27 @@ watch(messages, (newMessages) => {
     preloadMedia();
   }
 }, { deep: true });
+
+watch(
+  () => messages.length,
+  (newLength, oldLength) => {
+    if (newLength > oldLength) {
+      // New message arrived
+      nextTick(() => {
+        if (!chatContainer.value) return;
+        
+        const { scrollTop, scrollHeight, clientHeight } = chatContainer.value;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+        
+        // Only auto-scroll if user is near the bottom
+        if (isNearBottom) {
+          scrollToBottom(false); // Instant scroll for new messages
+        }
+      });
+    }
+  }
+);
+
 
 // Rest of existing methods remain the same...
 const refreshCurrentConversation = async () => {
@@ -3493,12 +3542,36 @@ const saveAssignment = async () => {
   }
 };
 
-const scrollToBottom = async () => {
+const scrollToBottom = async (smooth = true) => {
   await nextTick();
   if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    isAutoScrolling.value = true;
+    chatContainer.value.scrollTo({
+      top: chatContainer.value.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+    
+    // Hide button after scrolling
+    setTimeout(() => {
+      showScrollToBottomButton.value = false;
+      isAutoScrolling.value = false;
+    }, 300);
   }
 };
+
+// Handle scroll events to show/hide scroll-to-bottom button
+const handleScroll = () => {
+  if (isAutoScrolling.value) return;
+  
+  if (!chatContainer.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = chatContainer.value;
+  
+  // Show button if user is not near bottom (within 100px of bottom)
+  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+  showScrollToBottomButton.value = !isNearBottom;
+};
+
 
 const shouldShowDateSeparator = (message: MessageDto, index: number) => {
   if (index === 0) return true;
