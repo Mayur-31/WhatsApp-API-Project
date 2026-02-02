@@ -101,7 +101,7 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 h-[calc(100vh-180px)] bg-white border-t border-gray-200">
+      <div class="flex flex-1 h-full bg-white border-t border-gray-200">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
         <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
