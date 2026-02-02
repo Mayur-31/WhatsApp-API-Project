@@ -101,7 +101,7 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden min-h-0">
+      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
         <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
@@ -247,8 +247,8 @@
             </div>
           </div>
         </div>
-          
-        <div class="flex h-screen min-h-0">
+
+        <div class="flex flex-1 min-h-0">
         <!-- Chat Area -->
         <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
@@ -4180,6 +4180,42 @@ const scrollToRepliedMessage = async (messageId: number) => {
 
 .overflow-y-auto::-webkit-scrollbar-track {
   background: transparent;
+}
+
+
+.flex-1.flex-col.bg-gray-50 {
+  min-height: 0 !important;
+  height: 100%;
+}
+
+.flex-1.min-h-0.overflow-y-auto {
+  min-height: 0 !important;
+  flex: 1 1 0% !important;
+  height: 0; /* Critical for flexbox scrolling */
+}
+
+/* Ensure parent has fixed height */
+.h-\[calc\(100vh-180px\)\] {
+  min-height: 0;
+}
+
+/* Custom scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
