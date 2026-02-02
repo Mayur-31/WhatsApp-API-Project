@@ -104,7 +104,7 @@
       <div class="flex flex-1 h-full bg-white border-t border-gray-200">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
+        <div class="bg-white border-r border-gray-200 flex flex-col h-full overflow-hidden">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -250,7 +250,7 @@
 
         
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-white min-h-0 h-full">
+        <div class="flex flex-col h-full">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -4219,7 +4219,7 @@ const scrollToRepliedMessage = async (messageId: number) => {
 }
 
 .bg-green-500 {
-  background-color: #07f71f !important;
+  background-color: #10b981 !important;
 }
 
 .border-gray-200 {
