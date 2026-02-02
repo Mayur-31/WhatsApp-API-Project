@@ -101,10 +101,10 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-160px)]">
+      <div class="flex flex-1 h-full bg-white border-t border-gray-200">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -250,7 +250,7 @@
 
         
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col min-h-0 bg-gray-50">
+        <div class="flex-1 flex flex-col bg-white min-h-0 h-full">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
@@ -456,7 +456,7 @@
 
             <!-- Messages Area -->
             <div 
-              class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-100 custom-scrollbar relative"
+              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative"
               ref="chatContainer"
               @scroll="handleScroll"
             >
@@ -4184,23 +4184,19 @@ const scrollToRepliedMessage = async (messageId: number) => {
 
 
 .flex-1.flex-col.bg-gray-50 {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  min-height: 0 !important;
+  height: 100%;
 }
 
-/* Remove or fix the conflicting rule */
 .flex-1.min-h-0.overflow-y-auto {
-  min-height: 0;
-  flex: 1 1 auto; /* ✅ Changed from 0% to auto */
-  overflow-y: auto !important; /* ✅ Force scrollbar */
+  min-height: 0 !important;
+  flex: 1 1 0% !important;
+  height: 0; /* Critical for flexbox scrolling */
 }
-
-
 
 /* Ensure parent has fixed height */
 .h-\[calc\(100vh-180px\)\] {
-  height: calc(100vh - 160px) !important;
+  min-height: 0;
 }
 
 /* Custom scrollbar styling */
@@ -4216,10 +4212,6 @@ const scrollToRepliedMessage = async (messageId: number) => {
 /* WhatsApp exact colors */
 .bg-gray-50 {
   background-color: #f0f2f5 !important;
-}
-
-.bg-gray-100 {
-  background-color: #e9edef !important;
 }
 
 .bg-white {
@@ -4256,24 +4248,14 @@ const scrollToRepliedMessage = async (messageId: number) => {
   border-right: 1px solid #e9edef !important;
 }
 
-.custom-scrollbar {
-  overflow-y: auto !important;
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e0 #f7fafc;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f7fafc;
-  border-radius: 3px;
+  background: #f1f1f1;
+  border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
-  border-radius: 3px;
+  background: #c1c1c1;
+  border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
@@ -4523,21 +4505,13 @@ button {
   
   /* Hide chat on mobile when sidebar is active */
   .flex-1.flex-col {
-    min-height: 0;
-    height: 100%;
+    display: none;
   }
   
   /* Show chat when conversation is selected */
   .flex-1.flex-col.active {
     display: flex;
   }
-}
-
-.flex-1.overflow-y-auto {
-  flex: 1 1 0%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Avatar gradient styles */
