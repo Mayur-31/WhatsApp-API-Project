@@ -246,8 +246,9 @@
               </div>
             </div>
           </div>
+        </div>
           
-
+        <div class="flex h-screen min-h-0">
         <!-- Chat Area -->
         <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
@@ -2536,6 +2537,14 @@ onMounted(async () => {
   // Close context menu when clicking outside
   document.addEventListener('click', closeMessageMenu);
   document.addEventListener('click', closeDropdownOnClickOutside);
+
+   nextTick(() => {
+    console.log('🔄 Chat container mounted:', {
+      element: chatContainer.value,
+      hasScrollEvent: chatContainer.value?.onscroll ? 'YES' : 'NO',
+      isScrollable: chatContainer.value?.style.overflowY === 'auto' ? 'YES' : 'NO'
+    });
+  });
 });
 
 // Watch for team changes
@@ -3561,15 +3570,32 @@ const scrollToBottom = async (smooth = true) => {
 
 // Handle scroll events to show/hide scroll-to-bottom button
 const handleScroll = () => {
+  console.log('🎯 SCROLL EVENT FIRED!'); // ADD THIS LINE
+  
   if (isAutoScrolling.value) return;
   
   if (!chatContainer.value) return;
 
   const { scrollTop, scrollHeight, clientHeight } = chatContainer.value;
   
-  // Show button if user is not near bottom (within 100px of bottom)
-  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-  showScrollToBottomButton.value = !isNearBottom;
+  // Calculate distance from bottom
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+  
+  // Show button if user is more than 100px from bottom
+  // AND if there are enough messages to scroll
+  const shouldShowButton = distanceFromBottom > 100 && scrollHeight > clientHeight;
+  
+  console.log('📊 Scroll stats:', {  // ADD THIS LINE
+    distanceFromBottom,
+    scrollHeight,
+    clientHeight,
+    shouldShowButton
+  });
+  
+  // Only update if value changed to avoid unnecessary re-renders
+  if (showScrollToBottomButton.value !== shouldShowButton) {
+    showScrollToBottomButton.value = shouldShowButton;
+  }
 };
 
 
