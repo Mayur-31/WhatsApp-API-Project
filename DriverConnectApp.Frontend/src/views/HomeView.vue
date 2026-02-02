@@ -4219,7 +4219,7 @@ const scrollToRepliedMessage = async (messageId: number) => {
 }
 
 .bg-green-500 {
-  background-color: #dcf8c6 !important;
+  background-color: #07f71f !important;
 }
 
 .border-gray-200 {
