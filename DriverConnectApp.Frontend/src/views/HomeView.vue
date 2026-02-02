@@ -246,9 +246,9 @@
               </div>
             </div>
           </div>
-        </div>
+        
 
-        <div class="flex flex-1 min-h-0">
+        
         <!-- Chat Area -->
         <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
           <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
