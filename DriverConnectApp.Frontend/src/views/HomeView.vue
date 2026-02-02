@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-green-50">
+  <div class="h-screen flex flex-col bg-white overflow-hidden">
     <!-- Navigation Header with Team Selector -->
     <nav v-if="isAuthenticated" class="bg-green-600 text-white shadow-lg">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -83,7 +83,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full h-[calc(100vh-80px)] py-4 px-4 sm:px-6 lg:px-8">
+    <main class="flex-1 w-full overflow-hidden">
       <!-- Team Info Banner -->
       <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
         <p class="text-blue-700 text-sm">
@@ -101,10 +101,10 @@
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 max-w-screen-2xl mx-auto shadow-2xl rounded-lg overflow-hidden h-[calc(100vh-180px)]">
+      <div class="flex flex-1 h-full bg-white border-t border-gray-200">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -201,7 +201,7 @@
           </div>
   
           <!-- Conversations List -->
-          <div class="overflow-y-auto h-[600px]">
+          <div class="flex-1 overflow-y-auto">
             <!-- ... rest of your conversations list remains the same ... -->
             <div v-if="loading" class="p-4 text-center text-gray-500">Loading conversations...</div>
             <div v-else-if="!conversations || conversations.length === 0" class="p-4 text-center text-gray-500">
@@ -250,8 +250,8 @@
 
         
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-gray-50 min-h-0">
-          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-[600px] text-gray-500 p-8">
+        <div class="flex-1 flex flex-col bg-white min-h-0 h-full">
+          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
             <div class="text-6xl mb-4">💬</div>
             <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
             <p class="text-center">Select a conversation from the list to start chatting</p>
@@ -456,7 +456,7 @@
 
             <!-- Messages Area -->
             <div 
-              class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 bg-green-50 custom-scrollbar relative" 
+              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative"
               ref="chatContainer"
               @scroll="handleScroll"
             >
@@ -4202,6 +4202,50 @@ const scrollToRepliedMessage = async (messageId: number) => {
 /* Custom scrollbar styling */
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
+}
+
+/* EMERGENCY: Force WhatsApp Web layout */
+.h-screen.flex-col.bg-white {
+  background: linear-gradient(180deg, #00a884 0%, #00a884 130px, #f0f2f5 130px, #f0f2f5 100%) !important;
+}
+
+/* WhatsApp exact colors */
+.bg-gray-50 {
+  background-color: #f0f2f5 !important;
+}
+
+.bg-white {
+  background-color: #ffffff !important;
+}
+
+.bg-green-500 {
+  background-color: #dcf8c6 !important;
+}
+
+.border-gray-200 {
+  border-color: #e9edef !important;
+}
+
+/* Remove all rounded corners for WhatsApp Web */
+.rounded-lg,
+.rounded-full,
+.rounded,
+.rounded-md {
+  border-radius: 8px !important;
+}
+
+/* WhatsApp Web exact chat container */
+.max-w-screen-2xl.mx-auto {
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Full height for sidebar */
+.w-\[360px\] {
+  height: 100vh !important;
+  border-right: 1px solid #e9edef !important;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
