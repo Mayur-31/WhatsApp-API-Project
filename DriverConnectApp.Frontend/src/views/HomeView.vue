@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col bg-white overflow-hidden">
     <!-- Navigation Header with Team Selector -->
-    <nav v-if="isAuthenticated" class="bg-green-600 text-white shadow-lg">
+    <nav v-if="isAuthenticated" class="bg-green-600 text-white shadow-lg flex-shrink-0">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-4">
           <div class="flex items-center space-x-4">
@@ -83,9 +83,9 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="flex-1 w-full overflow-hidden">
+    <main class="flex-1 flex flex-col overflow-hidden min-h-0">
       <!-- Team Info Banner -->
-      <div v-if="isAdmin && selectedTeam" class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded-lg max-w-screen-2xl mx-auto">
+      <div v-if="isAdmin && selectedTeam" class="p-3 bg-blue-100 border-b border-blue-300 flex-shrink-0">
         <p class="text-blue-700 text-sm">
           📋 Viewing conversations for: <strong>{{ selectedTeam.name }}</strong>
           <span v-if="selectedTeam.whatsAppPhoneNumber" class="ml-2">
@@ -94,17 +94,17 @@
         </p>
       </div>
   
-      <div v-else-if="userTeam" class="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg max-w-screen-2xl mx-auto">
+      <div v-else-if="userTeam" class="p-3 bg-green-100 border-b border-green-300 flex-shrink-0">
         <p class="text-green-700 text-sm">
           👥 You are viewing your team: <strong>{{ userTeam.name }}</strong>
         </p>
       </div>
   
       <!-- UPDATED: Full-width Flex Layout -->
-      <div class="flex flex-1 h-full bg-white border-t border-gray-200">
+      <div class="flex flex-1 bg-white overflow-hidden min-h-0">
         <!-- Conversations List -->
         <!-- Updated Conversations List Header Section -->
-        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full">
+        <div class="w-[360px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-full min-h-0">
           <div class="bg-green-100 px-4 py-3 border-b">
             <!-- Main Header Row -->
             <div class="flex justify-between items-center mb-3">
@@ -248,22 +248,22 @@
           </div>
         
 
+        <!-- No Conversation Selected -->
+        <div v-if="!selectedConversation" class="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 bg-gray-50">
+          <div class="text-6xl mb-4">💬</div>
+          <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
+          <p class="text-center">Select a conversation from the list to start chatting</p>
+          <p class="text-sm mt-2 text-gray-400">
+            Use filters to find specific conversations
+            <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
+            <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
+          </p>
+        </div>
         
         <!-- Chat Area -->
-        <div class="flex-1 flex flex-col bg-white min-h-0 h-full">
-          <div v-if="!selectedConversation" class="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
-            <div class="text-6xl mb-4">💬</div>
-            <h3 class="text-xl font-semibold mb-2">No Conversation Selected</h3>
-            <p class="text-center">Select a conversation from the list to start chatting</p>
-            <p class="text-sm mt-2 text-gray-400">
-              Use filters to find specific conversations
-              <span v-if="showGroupsOnly" class="block">Currently showing: Groups Only</span>
-              <span v-if="showUnansweredOnly" class="block">Currently showing: Unanswered Only</span>
-            </p>
-          </div>
-          <div class="flex-shrink-0">
-            <!-- Chat Header -->
-            <div class="bg-white border-b border-gray-200 px-4 py-3">
+        <div v-if="selectedConversation" class="flex-1 flex flex-col bg-white overflow-hidden min-h-0">
+          <!-- Chat Header -->
+          <div class="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <div class="flex items-center justify-between">
     
               <!-- Left: Contact Info -->
@@ -438,9 +438,9 @@
             </div>
           </div>
             
-            <!-- 24-Hour Window Warning (Slim Banner) -->
-            <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
-                  class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between">
+          <!-- 24-Hour Window Warning (Slim Banner) -->
+          <div v-if="!selectedConversation.canSendNonTemplateMessages && !selectedConversation.IsGroupConversation" 
+                class="bg-yellow-50 px-4 py-2 border-b border-yellow-200 flex items-center justify-between flex-shrink-0">
               <div class="flex items-center space-x-2 text-sm">
                 <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
@@ -454,12 +454,12 @@
               </button>
             </div>
 
-            <!-- Messages Area -->
-            <div 
-              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative"
-              ref="chatContainer"
-              @scroll="handleScroll"
-            >
+          <!-- Messages Area -->
+          <div 
+            class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 custom-scrollbar relative min-h-0"
+            ref="chatContainer"
+            @scroll="handleScroll"
+          >
               <div v-if="messagesLoading" class="text-center text-gray-500 py-8">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                 Loading messages...
@@ -811,13 +811,13 @@
               </button>
             </div>
 
-            <!-- ENHANCED: Clickable Reply Context Bar -->
-            <div 
-              v-if="replyingToMessage" 
-              class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
-              @click="scrollToRepliedMessage(replyingToMessage.Id)"
-              :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
-            >
+          <!-- ENHANCED: Clickable Reply Context Bar -->
+          <div 
+            v-if="replyingToMessage" 
+            class="bg-blue-50 px-6 py-2 border-t border-blue-200 flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors flex-shrink-0"
+            @click="scrollToRepliedMessage(replyingToMessage.Id)"
+            :title="`Click to view the original message from ${getEnhancedSenderName(replyingToMessage)}`"
+          >
               <div class="flex items-center space-x-2">
                 <span class="text-blue-600">↩️</span>
                 <span class="text-sm text-blue-700">Replying to {{ getEnhancedSenderName(replyingToMessage) }}</span>
@@ -831,8 +831,8 @@
               </button>
             </div>
 
-            <!-- Upload Progress Section -->
-            <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200">
+          <!-- Upload Progress Section -->
+          <div v-if="isUploading" class="bg-blue-50 px-6 py-3 border-t border-blue-200 flex-shrink-0">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-blue-700">{{ uploadStatus }}</span>
                 <span class="text-sm text-blue-600">{{ uploadProgress }}%</span>
@@ -845,8 +845,8 @@
               </div>
             </div>
 
-            <!-- File Info Section -->
-            <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200">
+          <!-- File Info Section -->
+          <div v-if="showFileInfo && uploadedFile" class="bg-green-50 px-6 py-2 border-t border-green-200 flex-shrink-0">
               <div class="flex items-center justify-between">
                 <span class="text-sm text-green-700">
                   📎 {{ uploadedFile.name }} ({{ fileInfo }})
@@ -860,8 +860,8 @@
               </div>
             </div>
 
-            <!-- Enhanced Media Options -->
-            <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t">
+          <!-- Enhanced Media Options -->
+          <div v-if="showMediaOptions" class="bg-gray-100 px-6 py-3 border-t flex-shrink-0">
               <div class="flex justify-between items-center mb-3">
                 <span class="text-sm font-medium text-gray-700">Send Media</span>
                 <button 
@@ -890,8 +890,8 @@
             
             
             
-            <!-- Message Input -->
-            <div class="bg-white px-6 py-4 border-t">
+          <!-- Message Input -->
+          <div class="bg-white px-6 py-4 border-t flex-shrink-0">
               <div class="flex space-x-4 items-start">
                 <!-- Media Toggle Button -->
                 <button 
@@ -964,7 +964,6 @@
             </div>
           </div>
         </div>
-      </div>
     </main>
 
     <!-- Template Dialog -->
@@ -4199,67 +4198,27 @@ const scrollToRepliedMessage = async (messageId: number) => {
   min-height: 0;
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar styling - WhatsApp-like */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-}
-
-/* EMERGENCY: Force WhatsApp Web layout */
-.h-screen.flex-col.bg-white {
-  background: linear-gradient(180deg, #00a884 0%, #00a884 130px, #f0f2f5 130px, #f0f2f5 100%) !important;
-}
-
-/* WhatsApp exact colors */
-.bg-gray-50 {
-  background-color: #f0f2f5 !important;
-}
-
-.bg-white {
-  background-color: #ffffff !important;
-}
-
-.bg-green-500 {
-  background-color: #10b981 !important;
-}
-
-.border-gray-200 {
-  border-color: #e9edef !important;
-}
-
-/* Remove all rounded corners for WhatsApp Web */
-.rounded-lg,
-.rounded-full,
-.rounded,
-.rounded-md {
-  border-radius: 8px !important;
-}
-
-/* WhatsApp Web exact chat container */
-.max-w-screen-2xl.mx-auto {
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  border-radius: 0 !important;
-}
-
-/* Full height for sidebar */
-.w-\[360px\] {
-  height: 100vh !important;
-  border-right: 1px solid #e9edef !important;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
